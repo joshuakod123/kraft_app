@@ -12,36 +12,25 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _isLoginMode = true; // 로그인 vs 회원가입 모드
+  final _emailCtrl = TextEditingController();
+  final _pwCtrl = TextEditingController();
+  bool _isLogin = true;
   bool _isLoading = false;
 
   Future<void> _submit() async {
-    final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
-
-    if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('이메일과 비밀번호를 입력해주세요.')));
-      return;
-    }
-
     setState(() => _isLoading = true);
-
     try {
-      if (_isLoginMode) {
-        await ref.read(authProvider.notifier).login(email, password);
+      if (_isLogin) {
+        await ref.read(authProvider.notifier).login(_emailCtrl.text.trim(), _pwCtrl.text.trim());
       } else {
-        await ref.read(authProvider.notifier).signUp(email, password);
+        await ref.read(authProvider.notifier).signUp(_emailCtrl.text.trim(), _pwCtrl.text.trim());
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('회원가입 성공! 로그인해주세요.')));
-          setState(() => _isLoginMode = true); // 가입 후 로그인 모드로 전환
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('가입 완료! 로그인해주세요.')));
+          setState(() => _isLogin = true);
         }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('오류 발생: $e')));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -51,32 +40,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage('assets/images/logo.png'), // 배경 이미지가 있다면 교체
-            fit: BoxFit.cover,
-            opacity: 0.2, // 어둡게 처리
-          ),
-          color: Colors.black,
-        ),
+        color: Colors.black, // 배경색
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: Column(
               children: [
-                const Text(
-                  'KRAFT',
-                  style: TextStyle(
-                      fontSize: 48,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      letterSpacing: 8
-                  ),
-                ).animate().fadeIn().moveY(begin: -20, end: 0),
+                const Text('KRAFT', style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 8))
+                    .animate().fadeIn().moveY(begin: -20, end: 0),
                 const SizedBox(height: 50),
 
                 GlassContainer.clearGlass(
-                  height: 400,
+                  height: 420,
                   width: double.infinity,
                   borderRadius: BorderRadius.circular(20),
                   borderWidth: 1.0,
@@ -86,56 +61,42 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        _isLoginMode ? 'MEMBER LOGIN' : 'JOIN KRAFT',
-                        style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                      ),
+                      Text(_isLogin ? 'MEMBER LOGIN' : 'JOIN KRAFT', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 30),
                       TextField(
-                        controller: _emailController,
+                        controller: _emailCtrl,
                         style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          hintText: 'Email',
-                          hintStyle: TextStyle(color: Colors.grey[400]),
-                          prefixIcon: const Icon(Icons.email, color: Colors.white),
-                          enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white54)),
+                        decoration: const InputDecoration(
+                          hintText: 'Email', hintStyle: TextStyle(color: Colors.grey),
+                          prefixIcon: Icon(Icons.email, color: Colors.white),
+                          enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white54)),
                         ),
                       ),
                       const SizedBox(height: 20),
                       TextField(
-                        controller: _passwordController,
+                        controller: _pwCtrl,
                         obscureText: true,
                         style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          hintText: 'Password',
-                          hintStyle: TextStyle(color: Colors.grey[400]),
-                          prefixIcon: const Icon(Icons.lock, color: Colors.white),
-                          enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white54)),
+                        decoration: const InputDecoration(
+                          hintText: 'Password', hintStyle: TextStyle(color: Colors.grey),
+                          prefixIcon: Icon(Icons.lock, color: Colors.white),
+                          enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white54)),
                         ),
                       ),
                       const SizedBox(height: 40),
-                      _isLoading
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : SizedBox(
+                      SizedBox(
                         width: double.infinity,
                         height: 50,
                         child: ElevatedButton(
-                          onPressed: _submit,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: Colors.black,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                          child: Text(_isLoginMode ? 'ENTER' : 'SIGN UP', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          onPressed: _isLoading ? null : _submit,
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black),
+                          child: _isLoading ? const CircularProgressIndicator() : Text(_isLogin ? 'ENTER' : 'SIGN UP', style: const TextStyle(fontWeight: FontWeight.bold)),
                         ),
                       ),
                       const SizedBox(height: 16),
                       TextButton(
-                        onPressed: () => setState(() => _isLoginMode = !_isLoginMode),
-                        child: Text(
-                          _isLoginMode ? 'Create an account' : 'Already have an account?',
-                          style: const TextStyle(color: Colors.white70),
-                        ),
+                        onPressed: () => setState(() => _isLogin = !_isLogin),
+                        child: Text(_isLogin ? 'Create an account' : 'Back to Login', style: const TextStyle(color: Colors.white70)),
                       )
                     ],
                   ),

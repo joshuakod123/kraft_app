@@ -4,32 +4,44 @@ import '../../core/constants/department_enum.dart';
 import '../../core/state/global_providers.dart';
 import '../../core/data/supabase_repository.dart';
 
-// 인증 상태: Unauthenticated, OnboardingRequired, Authenticated
-enum AuthStatus { unauthenticated, onboardingRequired, authenticated }
+enum AuthStatus { initial, unauthenticated, onboardingRequired, authenticated }
 
 class AuthNotifier extends Notifier<AuthStatus> {
   final _repo = SupabaseRepository();
 
   @override
   AuthStatus build() {
-    _restoreSession();
-    return AuthStatus.unauthenticated;
+    _initialize();
+    return AuthStatus.initial;
+  }
+
+  Future<void> _initialize() async {
+    // 스플래시 애니메이션 시간 확보 (2.5초) + 세션 확인
+    await Future.wait([
+      _restoreSession(),
+      Future.delayed(const Duration(milliseconds: 2500)),
+    ]);
   }
 
   Future<void> _restoreSession() async {
-    final session = Supabase.instance.client.auth.currentSession;
-    if (session != null) {
-      await _checkProfile();
+    try {
+      final session = Supabase.instance.client.auth.currentSession;
+      if (session != null) {
+        await _checkProfile();
+        return;
+      }
+    } catch (e) {
+      // 에러 시 비로그인 처리
     }
+    state = AuthStatus.unauthenticated;
   }
 
   Future<void> _checkProfile() async {
     final profile = await _repo.getUserProfile();
-    if (profile == null) {
-      // 로그인은 됐는데 DB에 정보가 없음 -> 온보딩 필요
+    // 정보가 없거나, 필수 정보(이름 등)가 누락되었으면 온보딩으로 보냄
+    if (profile == null || profile['name'] == null || profile['team_id'] == null) {
       state = AuthStatus.onboardingRequired;
     } else {
-      // 정보가 있음 -> 메인으로
       _setGlobalState(profile);
       state = AuthStatus.authenticated;
     }
@@ -38,14 +50,12 @@ class AuthNotifier extends Notifier<AuthStatus> {
   void _setGlobalState(Map<String, dynamic> profile) {
     final teamId = profile['team_id'] as int?;
     final dept = Department.values.firstWhere(
-            (d) => d.id == teamId,
-        orElse: () => Department.business
+          (d) => d.id == teamId,
+      orElse: () => Department.business,
     );
 
     ref.read(currentDeptProvider.notifier).setDept(dept);
     ref.read(isManagerProvider.notifier).setManager(profile['role'] == 'manager');
-    // 사용자 이름 저장 (임시로 isManagerProvider 옆에 저장하거나 별도 Provider 필요)
-    // 여기선 간단히 ref.read를 통해 어딘가 저장했다고 가정하거나, DB에서 매번 불러올 수도 있음
   }
 
   Future<void> login(String email, String password) async {
@@ -57,7 +67,7 @@ class AuthNotifier extends Notifier<AuthStatus> {
   Future<void> signUp(String email, String password) async {
     final error = await _repo.signUp(email: email, password: password);
     if (error != null) throw error;
-    // 회원가입 직후에는 프로필이 없으므로 온보딩으로 가야 함 (로그인 되면)
+    // 회원가입 직후엔 프로필이 없으므로 로그인 성공 시 자동으로 온보딩으로 이동됨
   }
 
   Future<void> completeOnboarding({
@@ -76,11 +86,10 @@ class AuthNotifier extends Notifier<AuthStatus> {
     );
 
     if (success) {
-      // 전역 상태 갱신
       ref.read(currentDeptProvider.notifier).setDept(dept);
       state = AuthStatus.authenticated;
     } else {
-      throw "Failed to update profile";
+      throw "프로필 저장에 실패했습니다.";
     }
   }
 

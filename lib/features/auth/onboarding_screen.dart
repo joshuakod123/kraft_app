@@ -19,7 +19,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Department? _selectedDept;
   bool _isLoading = false;
 
-  Future<void> _completeOnboarding() async {
+  Future<void> _complete() async {
     if (!_formKey.currentState!.validate() || _selectedDept == null) {
       if (_selectedDept == null) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('소속 팀을 선택해주세요.')));
@@ -55,20 +55,19 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text("기본 정보를 입력해주세요.", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+              const Text("학회원 정보를 입력해주세요.", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
               const SizedBox(height: 30),
 
-              _buildTextField("이름 (Name)", _nameCtrl),
-              _buildTextField("학번 (Student ID)", _studentIdCtrl),
-              _buildTextField("학과 (Major)", _majorCtrl),
-              _buildTextField("전화번호 (Phone)", _phoneCtrl),
+              _buildField("이름 (Name)", _nameCtrl),
+              _buildField("학번 (Student ID)", _studentIdCtrl),
+              _buildField("학과 (Major)", _majorCtrl),
+              _buildField("전화번호 (Phone)", _phoneCtrl),
 
               const SizedBox(height: 20),
-              const Text("소속 팀 (Team)", style: TextStyle(color: Colors.white70, fontSize: 14)),
-              const SizedBox(height: 10),
               DropdownButtonFormField<Department>(
                 dropdownColor: Colors.grey[900],
                 value: _selectedDept,
+                hint: const Text("소속 팀 선택", style: TextStyle(color: Colors.grey)),
                 items: Department.values.map((dept) {
                   return DropdownMenuItem(
                     value: dept,
@@ -88,7 +87,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: _isLoading ? null : _completeOnboarding,
+                  onPressed: _isLoading ? null : _complete,
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.white),
                   child: _isLoading
                       ? const CircularProgressIndicator()
@@ -102,7 +101,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     );
   }
 
-  Widget _buildTextField(String label, TextEditingController controller) {
+  Widget _buildField(String label, TextEditingController controller) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16.0),
       child: TextFormField(
