@@ -8,6 +8,7 @@ import 'theme/app_theme.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // [중요] Supabase 프로젝트 설정값
   await Supabase.initialize(
     url: 'https://sipcistijzrouecclncj.supabase.co',
     anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpcGNpc3Rpanpyb3VlY2NsbmNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQwNjc5OTIsImV4cCI6MjA3OTY0Mzk5Mn0.M9wyquasQNJy9Ri4C5Zl-ncqYt2ghPiCF4F-6iQLJK0',
@@ -28,7 +29,7 @@ class KraftApp extends ConsumerWidget {
       title: 'KRAFT App',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.getDynamicTheme(currentDept),
-      routerConfig: router,
+      routerConfig: router, // routerProvider가 정상적으로 로드되어야 에러가 안 납니다.
     );
   }
 }

@@ -26,44 +26,15 @@ class SupabaseRepository {
       return e.toString();
     }
   }
-
   Future<Map<String, dynamic>?> getUserProfile() async {
     try {
       final userId = _client.auth.currentUser?.id;
       if (userId == null) return null;
-
-      final data = await _client.from('users').select().eq('id', userId).maybeSingle();
+      final data = await _client.from('users').select().eq('id', userId).single();
       return data;
     } catch (e) {
       debugPrint('Profile Fetch Error: $e');
       return null;
-    }
-  }Future<bool> updateUserProfile({
-    required String name,
-    required String studentId,
-    required String major,
-    required String phone,
-    required int teamId,
-  }) async {
-    try {
-      final user = _client.auth.currentUser;
-      if (user == null) return false;
-
-      // upsert: 있으면 수정, 없으면 생성
-      await _client.from('users').upsert({
-        'id': user.id,
-        'email': user.email,
-        'name': name,
-        'student_id': studentId,
-        'major': major,
-        'phone': phone,
-        'team_id': teamId,
-        'updated_at': DateTime.now().toIso8601String(),
-      });
-      return true;
-    } catch (e) {
-      debugPrint('Update Profile Error: $e');
-      return false;
     }
   }
 
