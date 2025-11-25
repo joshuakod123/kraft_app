@@ -1,51 +1,85 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../core/constants/department_enum.dart';
+import '../../core/state/global_providers.dart';
+import '../../features/auth/auth_provider.dart';
+import '../../theme/app_theme.dart';
 
-class MainShell extends StatefulWidget {
+class MainShell extends ConsumerWidget {
   final Widget child;
+
   const MainShell({super.key, required this.child});
 
   @override
-  State<MainShell> createState() => _MainShellState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final String location = GoRouterState.of(context).uri.toString();
+    int currentIndex = 0;
+    if (location.startsWith('/archive')) currentIndex = 1;
+    if (location.startsWith('/stream')) currentIndex = 2;
 
-class _MainShellState extends State<MainShell> {
-  int _currentIndex = 0;
+    final dept = ref.watch(currentDeptProvider);
 
-  void _onItemTapped(int index, BuildContext context) {
-    setState(() => _currentIndex = index);
-    switch (index) {
-      case 0:
-        context.go('/home');
-        break;
-      case 1:
-        context.go('/curriculum');
-        break;
-      case 2:
-      // context.go('/stream');
-        break;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return Scaffold(
-      body: widget.child,
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (idx) => _onItemTapped(idx, context),
-        backgroundColor: kAppBackgroundColor,
-        selectedItemColor: Theme.of(context).primaryColor,
-        unselectedItemColor: Colors.grey,
-        type: BottomNavigationBarType.fixed,
-        showSelectedLabels: false,
-        showUnselectedLabels: false,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: 'Curriculum'),
-          BottomNavigationBarItem(icon: Icon(Icons.headphones), label: 'Stream'),
+      appBar: AppBar(
+        title: Text(
+          'KRAFT',
+          style: GoogleFonts.chakraPetch(fontWeight: FontWeight.bold, letterSpacing: 2),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Team Select',
+            onPressed: () {
+              ref.read(authProvider.notifier).logout();
+            },
+          ),
+          const SizedBox(width: 8),
         ],
+      ),
+      body: child,
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          // [수정] withOpacity로 변경
+          border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
+        ),
+        child: NavigationBar(
+          selectedIndex: currentIndex,
+          backgroundColor: kAppBackgroundColor,
+          // [수정] withOpacity로 변경
+          indicatorColor: dept.color.withOpacity(0.2),
+          onDestinationSelected: (index) {
+            switch (index) {
+              case 0:
+                context.go('/home');
+                break;
+              case 1:
+                context.go('/archive');
+                break;
+              case 2:
+                context.go('/stream');
+                break;
+            }
+          },
+          destinations: [
+            const NavigationDestination(
+              icon: Icon(Icons.home_outlined),
+              selectedIcon: Icon(Icons.home),
+              label: 'Home',
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.folder_open),
+              selectedIcon: Icon(Icons.folder, color: dept.color),
+              label: 'Archive',
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.headphones_outlined),
+              selectedIcon: Icon(Icons.headphones, color: dept.color),
+              label: 'Stream',
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+// import 'package:supabase_flutter/supabase_flutter.dart'; // Supabase 설정 시 주석 해제
 import 'core/router/app_router.dart';
 import 'core/state/global_providers.dart';
 import 'theme/app_theme.dart';
@@ -8,11 +8,8 @@ import 'theme/app_theme.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // TODO: Supabase 설정 (본인의 URL/KEY 입력)
-  // await Supabase.initialize(
-  //   url: 'YOUR_SUPABASE_URL',
-  //   anonKey: 'YOUR_SUPABASE_KEY',
-  // );
+  // Supabase 초기화 코드는 나중에 키를 넣고 주석 해제하세요.
+  // await Supabase.initialize(...);
 
   runApp(const ProviderScope(child: KraftApp()));
 }
@@ -22,18 +19,18 @@ class KraftApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // 현재 선택된 부서(Team) 상태 감지
     final currentDept = ref.watch(currentDeptProvider);
 
-    return MaterialApp.router(
-      title: 'KRAFT',
-      debugShowCheckedModeBanner: false,
+    // [수정됨] routerProvider를 watch하여 라우터 설정 가져오기
+    final router = ref.watch(routerProvider);
 
-      // Dynamic Theme 적용 (팀 컬러 반영)
+    return MaterialApp.router(
+      title: 'KRAFT App',
+      debugShowCheckedModeBanner: false,
       theme: AppTheme.getDynamicTheme(currentDept),
 
       // GoRouter 연결
-      routerConfig: appRouter,
+      routerConfig: router,
     );
   }
 }

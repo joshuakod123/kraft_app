@@ -1,74 +1,58 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../common/layout/main_shell.dart';
+import '../../features/auth/auth_provider.dart';
 import '../../features/auth/login_screen.dart';
 import '../../features/home/home_screen.dart';
-import '../constants/department_enum.dart'; // BottomNavi에서 색상 쓰기 위함
+import '../../features/curriculum/curriculum_list_screen.dart';
+import '../../features/streaming/stream_screen.dart';
 
-// 간단한 Shell (Bottom Navigation) 구현을 위해 여기서 바로 정의
-// 실제로는 별도 파일로 분리하는 것이 좋습니다.
-class MainShell extends StatefulWidget {
-  final Widget child;
-  const MainShell({super.key, required this.child});
+final routerProvider = Provider<GoRouter>((ref) {
+  final isAuth = ref.watch(authProvider);
 
-  @override
-  State<MainShell> createState() => _MainShellState();
-}
+  return GoRouter(
+    initialLocation: '/home',
+    debugLogDiagnostics: true,
 
-class _MainShellState extends State<MainShell> {
-  int _currentIndex = 0;
+    // 로그인 상태 리다이렉트
+    redirect: (context, state) {
+      final isLoggedIn = isAuth;
+      final isGoingToLogin = state.uri.toString() == '/login';
 
-  void _onItemTapped(int index, BuildContext context) {
-    setState(() => _currentIndex = index);
-    switch (index) {
-      case 0:
-        context.go('/home');
-        break;
-      case 1:
-      // context.go('/archive'); // 추후 구현
-        break;
-      case 2:
-      // context.go('/stream'); // 추후 구현
-        break;
-    }
-  }
+      if (!isLoggedIn && !isGoingToLogin) {
+        return '/login';
+      }
+      if (isLoggedIn && isGoingToLogin) {
+        return '/home';
+      }
+      return null;
+    },
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: widget.child,
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (idx) => _onItemTapped(idx, context),
-        backgroundColor: kAppBackgroundColor,
-        selectedItemColor: Colors.white, // 선택된 아이콘 (임시)
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.grid_view), label: 'Archive'),
-          BottomNavigationBarItem(icon: Icon(Icons.headphones), label: 'Stream'),
+    routes: [
+      GoRoute(
+        path: '/login',
+        builder: (context, state) => const LoginScreen(),
+      ),
+      ShellRoute(
+        builder: (context, state, child) {
+          return MainShell(child: child);
+        },
+        routes: [
+          GoRoute(
+            path: '/home',
+            builder: (context, state) => const HomeScreen(),
+          ),
+          GoRoute(
+            path: '/archive',
+            builder: (context, state) => const CurriculumListScreen(),
+          ),
+          GoRoute(
+            path: '/stream',
+            builder: (context, state) => const StreamScreen(),
+          ),
         ],
       ),
-    );
-  }
-}
-
-final appRouter = GoRouter(
-  initialLocation: '/login',
-  routes: [
-    GoRoute(
-      path: '/login',
-      builder: (context, state) => const LoginScreen(),
-    ),
-    ShellRoute(
-      builder: (context, state, child) {
-        return MainShell(child: child);
-      },
-      routes: [
-        GoRoute(
-          path: '/home',
-          builder: (context, state) => const HomeScreen(),
-        ),
-      ],
-    ),
-  ],
-);
+    ],
+  );
+});

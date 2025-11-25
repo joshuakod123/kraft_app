@@ -1,20 +1,38 @@
 import 'package:flutter/material.dart';
 
-// KRAFT 4대 부서 정의 (핵심 데이터)
+// [1] 앱 전체에서 사용하는 배경색 및 카드 색상 상수 정의
+const Color kAppBackgroundColor = Color(0xFF000000); // 완전 검정 혹은 아주 어두운 회색
+const Color kCardColor = Color(0xFF1E1E1E); // 카드 배경색 (어두운 회색)
+
 enum Department {
-  business(1, 'BUSINESS', Color(0xFF00FF00), Icons.analytics), // Neon Green
-  anr(2, 'A&R', Color(0xFFD900FF), Icons.album),               // Neon Purple
-  music(3, 'MUSIC', Color(0xFF00E5FF), Icons.graphic_eq),      // Neon Cyan
-  directing(4, 'DIRECTING', Color(0xFFFF3131), Icons.videocam); // Neon Red
+  business(
+    name: 'BUSINESS',
+    icon: Icons.business_center,
+    color: Color(0xFF00FF00), // Neon Green
+  ),
+  anr(
+    name: 'A&R',
+    icon: Icons.album,
+    color: Color(0xFFD900FF), // Neon Purple
+  ),
+  music(
+    name: 'MUSIC',
+    icon: Icons.music_note,
+    color: Color(0xFF00E5FF), // Neon Cyan
+  ),
+  directing(
+    name: 'DIRECTING',
+    icon: Icons.movie_creation,
+    color: Color(0xFFFF3131), // Neon Red
+  );
 
-  final int id;
   final String name;
-  final Color color;
   final IconData icon;
+  final Color color;
 
-  const Department(this.id, this.name, this.color, this.icon);
+  const Department({
+    required this.name,
+    required this.icon,
+    required this.color,
+  });
 }
-
-// 앱 전역 디자인 상수
-const Color kAppBackgroundColor = Color(0xFF121212); // 아주 짙은 회색
-const Color kCardColor = Color(0xFF1E1E1E); // 카드 배경색
