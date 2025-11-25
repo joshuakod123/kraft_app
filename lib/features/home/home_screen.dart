@@ -10,14 +10,12 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // 전역 상태에서 현재 부서와 관리자 여부를 가져옵니다.
     final dept = ref.watch(currentDeptProvider);
     final isManager = ref.watch(isManagerProvider);
 
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          // 1. Dynamic AppBar with Gradient
           SliverAppBar(
             expandedHeight: 220.0,
             floating: false,
@@ -38,7 +36,7 @@ class HomeScreen extends ConsumerWidget {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      dept.color.withOpacity(0.25), // 상단부 팀 컬러
+                      dept.color.withValues(alpha: 0.25), // 수정됨
                       kAppBackgroundColor,
                     ],
                   ),
@@ -47,13 +45,12 @@ class HomeScreen extends ConsumerWidget {
                   child: Icon(
                     dept.icon,
                     size: 120,
-                    color: dept.color.withOpacity(0.1),
+                    color: dept.color.withValues(alpha: 0.1), // 수정됨
                   ),
                 ),
               ),
             ),
             actions: [
-              // 관리자 전용 버튼
               if (isManager)
                 IconButton(
                   icon: const Icon(Icons.add_circle_outline),
@@ -76,7 +73,6 @@ class HomeScreen extends ConsumerWidget {
             ],
           ),
 
-          // 2. Department Notice Board
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
@@ -104,7 +100,7 @@ class HomeScreen extends ConsumerWidget {
                     decoration: BoxDecoration(
                       color: kCardColor,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: dept.color.withOpacity(0.3)),
+                      border: Border.all(color: dept.color.withValues(alpha: 0.3)), // 수정됨
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -130,7 +126,6 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
 
-          // 3. Curriculum Timeline
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             sliver: SliverList(
@@ -145,7 +140,7 @@ class HomeScreen extends ConsumerWidget {
                     ).animate().fadeIn(delay: (100 * index).ms).slideY(begin: 0.1),
                   );
                 },
-                childCount: 8, // 8주차 예시
+                childCount: 8,
               ),
             ),
           ),
@@ -170,7 +165,6 @@ class _CurriculumCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: kCardColor,
         borderRadius: BorderRadius.circular(16),
-        // 선택 시 미세한 테두리 효과 (나중에 Interaction 추가)
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -181,7 +175,7 @@ class _CurriculumCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: deptColor.withOpacity(0.15),
+                  color: deptColor.withValues(alpha: 0.15), // 수정됨
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(

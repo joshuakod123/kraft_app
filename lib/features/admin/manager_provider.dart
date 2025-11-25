@@ -1,8 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // 관리자 전용 기능 (승인 등) 로직
-class ManagerController extends StateNotifier<void> {
-  ManagerController() : super(null);
+class ManagerController extends Notifier<void> {
+  @override
+  void build() {
+    // 초기 상태 없음
+  }
 
   Future<void> approveAssignment(String assignmentId) async {
     // Supabase Update Logic
@@ -11,6 +14,4 @@ class ManagerController extends StateNotifier<void> {
   }
 }
 
-final managerProvider = StateNotifierProvider<ManagerController, void>((ref) {
-  return ManagerController();
-});
+final managerProvider = NotifierProvider<ManagerController, void>(ManagerController.new);

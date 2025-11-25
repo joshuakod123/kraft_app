@@ -15,7 +15,7 @@ class AppTheme {
       // Material 3 Color Scheme
       colorScheme: ColorScheme.dark(
         primary: dept.color,
-        secondary: dept.color.withOpacity(0.8),
+        secondary: dept.color.withValues(alpha: 0.8), // 수정됨
         surface: kCardColor,
         onPrimary: Colors.black, // 버튼 글씨는 검정색 (가독성)
       ),
