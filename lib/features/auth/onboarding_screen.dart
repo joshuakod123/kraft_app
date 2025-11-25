@@ -35,9 +35,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         dept: _selectedDept!,
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -45,7 +46,17 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(title: const Text("WELCOME"), backgroundColor: Colors.black),
+      appBar: AppBar(
+        title: const Text("정보 입력", style: TextStyle(color: Colors.white)),
+        backgroundColor: Colors.black,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () {
+            // [핵심] 뒤로가기 누르면 로그아웃 -> 로그인 화면으로 이동
+            ref.read(authProvider.notifier).logout();
+          },
+        ),
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Form(
@@ -54,6 +65,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text("학회원 정보를 입력해주세요.", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              const Text("입력하신 정보로 로그인이 유지됩니다.", style: TextStyle(color: Colors.white54, fontSize: 14)),
               const SizedBox(height: 30),
               _buildField("이름 (Name)", _nameCtrl),
               _buildField("학번 (Student ID)", _studentIdCtrl),

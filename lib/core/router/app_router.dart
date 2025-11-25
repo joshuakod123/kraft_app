@@ -17,7 +17,7 @@ import '../../features/attendance/attendance_scan_screen.dart';
 final routerProvider = Provider<GoRouter>((ref) {
   final authStateListenable = ValueNotifier<AuthStatus>(AuthStatus.initial);
 
-  ref.listen<AuthStatus>(authProvider, (previous, next) {
+  ref.listen<AuthStatus>(authProvider, (_, next) {
     authStateListenable.value = next;
   });
 
@@ -30,7 +30,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final status = ref.read(authProvider);
       final goingTo = state.uri.toString();
 
-      // 1. 로딩 중 -> 스플래시 유지
+      // 1. 로딩 중 -> 스플래시 고정
       if (status == AuthStatus.initial) return '/splash';
 
       // 2. 로그인 안 됨 -> 로그인 화면으로
@@ -38,28 +38,28 @@ final routerProvider = Provider<GoRouter>((ref) {
         if (goingTo != '/login') return '/login';
       }
 
-      // 3. 로그인 됐으나 정보 없음 -> 온보딩으로
+      // 3. 정보 입력 필요 -> 온보딩으로 (여기서 갇히지 않게 OnboardingScreen에 로그아웃 추가함)
       if (status == AuthStatus.onboardingRequired) {
         if (goingTo != '/onboarding') return '/onboarding';
       }
 
-      // 4. 로그인 & 정보 있음 -> 홈으로 (로그인/온보딩/스플래시 접근 시)
+      // 4. 로그인 완료 -> 홈으로
       if (status == AuthStatus.authenticated) {
         if (goingTo == '/login' || goingTo == '/onboarding' || goingTo == '/splash') {
           return '/home';
         }
       }
-
       return null;
     },
 
     routes: [
       GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
-      GoRoute(path: '/onboarding', builder: (context, state) => const OnboardingScreen()), // 추가됨
+      GoRoute(path: '/onboarding', builder: (context, state) => const OnboardingScreen()),
 
       GoRoute(path: '/qr_create', builder: (context, state) => const QrCreateScreen()),
       GoRoute(path: '/attendance_scan', builder: (context, state) => const AttendanceScanScreen()),
+
       GoRoute(
         path: '/assignment_upload',
         builder: (context, state) {
@@ -69,9 +69,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
 
       ShellRoute(
-        builder: (context, state, child) {
-          return MainShell(child: child);
-        },
+        builder: (context, state, child) => MainShell(child: child),
         routes: [
           GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
           GoRoute(path: '/archive', builder: (context, state) => const CurriculumListScreen()),

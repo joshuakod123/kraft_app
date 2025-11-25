@@ -141,4 +141,6 @@ class SupabaseRepository {
       return [];
     }
   }
+
+  updateUserProfile({required String name, required String studentId, required String major, required String phone, required int teamId}) {}
 }
