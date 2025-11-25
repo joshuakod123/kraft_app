@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/constants/department_enum.dart';
 import '../../core/state/global_providers.dart';
 import '../../features/auth/auth_provider.dart';
+import '../../features/streaming/mini_player.dart'; // 추가됨
 import '../../theme/app_theme.dart';
 
 class MainShell extends ConsumerWidget {
@@ -22,6 +23,15 @@ class MainShell extends ConsumerWidget {
     final dept = ref.watch(currentDeptProvider);
 
     return Scaffold(
+      body: Stack(
+        children: [
+          // 1. 메인 컨텐츠 (라우터에 따라 바뀌는 화면)
+          child,
+
+          // 2. 미니 플레이어 (항상 하단 위에 떠있음)
+          const MiniPlayer(),
+        ],
+      ),
       appBar: AppBar(
         title: Text(
           'KRAFT',
@@ -38,17 +48,14 @@ class MainShell extends ConsumerWidget {
           const SizedBox(width: 8),
         ],
       ),
-      body: child,
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          // [수정] withOpacity로 변경
-          border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
+          border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
         ),
         child: NavigationBar(
           selectedIndex: currentIndex,
           backgroundColor: kAppBackgroundColor,
-          // [수정] withOpacity로 변경
-          indicatorColor: dept.color.withOpacity(0.2),
+          indicatorColor: dept.color.withValues(alpha: 0.2),
           onDestinationSelected: (index) {
             switch (index) {
               case 0:

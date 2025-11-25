@@ -36,8 +36,8 @@ class HomeScreen extends ConsumerWidget {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      // [수정] withValues -> withOpacity
-                      dept.color.withOpacity(0.25),
+                      // [수정] withValues
+                      dept.color.withValues(alpha: 0.25),
                       kAppBackgroundColor,
                     ],
                   ),
@@ -46,7 +46,7 @@ class HomeScreen extends ConsumerWidget {
                   child: Icon(
                     dept.icon,
                     size: 120,
-                    color: dept.color.withOpacity(0.1), // [수정]
+                    color: dept.color.withValues(alpha: 0.1),
                   ),
                 ),
               ),
@@ -101,8 +101,8 @@ class HomeScreen extends ConsumerWidget {
                     decoration: BoxDecoration(
                       color: kCardColor,
                       borderRadius: BorderRadius.circular(16),
-                      // [수정]
-                      border: Border.all(color: dept.color.withOpacity(0.3)),
+                      // [수정] withValues
+                      border: Border.all(color: dept.color.withValues(alpha: 0.3)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -176,8 +176,8 @@ class _CurriculumCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  // [수정]
-                  color: deptColor.withOpacity(0.15),
+                  // [수정] withValues
+                  color: deptColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(

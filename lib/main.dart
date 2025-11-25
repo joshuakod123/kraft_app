@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-// import 'package:supabase_flutter/supabase_flutter.dart'; // Supabase 설정 시 주석 해제
+import 'package:supabase_flutter/supabase_flutter.dart'; // import 필수
 import 'core/router/app_router.dart';
 import 'core/state/global_providers.dart';
 import 'theme/app_theme.dart';
@@ -8,8 +8,11 @@ import 'theme/app_theme.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Supabase 초기화 코드는 나중에 키를 넣고 주석 해제하세요.
-  // await Supabase.initialize(...);
+  // [중요] Supabase 프로젝트 설정값 입력
+  await Supabase.initialize(
+    url: 'https://sipcistijzrouecclncj.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpcGNpc3Rpanpyb3VlY2NsbmNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQwNjc5OTIsImV4cCI6MjA3OTY0Mzk5Mn0.M9wyquasQNJy9Ri4C5Zl-ncqYt2ghPiCF4F-6iQLJK0',
+  );
 
   runApp(const ProviderScope(child: KraftApp()));
 }
@@ -20,16 +23,12 @@ class KraftApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currentDept = ref.watch(currentDeptProvider);
-
-    // [수정됨] routerProvider를 watch하여 라우터 설정 가져오기
     final router = ref.watch(routerProvider);
 
     return MaterialApp.router(
       title: 'KRAFT App',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.getDynamicTheme(currentDept),
-
-      // GoRouter 연결
       routerConfig: router,
     );
   }
