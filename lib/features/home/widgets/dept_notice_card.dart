@@ -15,7 +15,7 @@ class DeptNoticeCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: kCardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: dept.color.withOpacity(0.3)),
+        border: Border.all(color: dept.color.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

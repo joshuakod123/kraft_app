@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/department_enum.dart';
 
-// 하단 네비게이션 바(BottomNavigationBar)를 포함하는 껍데기 위젯
 class MainShell extends StatefulWidget {
   final Widget child;
   const MainShell({super.key, required this.child});
@@ -24,7 +23,7 @@ class _MainShellState extends State<MainShell> {
         context.go('/curriculum');
         break;
       case 2:
-      // context.go('/stream'); // 추후 구현
+      // context.go('/stream');
         break;
     }
   }
