@@ -10,7 +10,7 @@ class AppTheme {
       primaryColor: dept.color,
       colorScheme: ColorScheme.dark(
         primary: dept.color,
-        // [수정] withValues 사용
+        // [수정] withOpacity -> withValues
         secondary: dept.color.withValues(alpha: 0.8),
         surface: kCardColor,
         onPrimary: Colors.black,

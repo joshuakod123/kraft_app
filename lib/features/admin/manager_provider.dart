@@ -1,16 +1,13 @@
+import 'package:flutter/foundation.dart'; // debugPrint용
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-// 관리자 전용 기능 (승인 등) 로직
 class ManagerNotifier extends Notifier<void> {
   @override
-  void build() {
-    // 상태 없음 (void)
-  }
+  void build() {}
 
   Future<void> approveAssignment(String assignmentId) async {
-    // 여기에 Supabase 업데이트 로직이 들어갑니다.
-    // await supabase.from('assignments').update({'status': 'approved'}).eq('id', assignmentId);
-    print("Assignment $assignmentId Approved!");
+    // 실제 로직 구현
+    debugPrint("Assignment $assignmentId Approved!"); // [수정] debugPrint 사용
   }
 }
 

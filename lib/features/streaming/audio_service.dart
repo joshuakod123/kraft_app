@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart'; // debugPrint용
 import 'package:just_audio/just_audio.dart';
 
 class KraftAudioService {
@@ -8,7 +9,7 @@ class KraftAudioService {
       await _player.setUrl(url);
       _player.play();
     } catch (e) {
-      print("Audio Error: $e");
+      debugPrint("Audio Error: $e"); // [수정] debugPrint 사용
     }
   }
 

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
-// [1] 앱 전체에서 사용하는 배경색 및 카드 색상 상수 정의
+// 앱 전역 색상 상수
 const Color kAppBackgroundColor = Color(0xFF000000);
 const Color kCardColor = Color(0xFF1E1E1E);
 
 enum Department {
   business(
-    id: 1, // DB ID와 매핑
+    id: 1,
     name: 'BUSINESS',
     icon: Icons.business_center,
     color: Color(0xFF00FF00),

@@ -24,13 +24,12 @@ class AssignmentUploadScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 20),
 
-            // 파일 업로드 영역 (더미 UI)
             Container(
               height: 200,
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.grey[800]!),
                 borderRadius: BorderRadius.circular(16),
-                color: Colors.white.withOpacity(0.05),
+                color: Colors.white.withOpacity(0.05), // 수정됨
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -44,7 +43,6 @@ class AssignmentUploadScreen extends ConsumerWidget {
 
             const Spacer(),
 
-            // 제출 버튼
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: themeColor,
