@@ -1,13 +1,14 @@
+import 'package:flutter/foundation.dart'; // debugPrint용
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-// [수정] void 상태 관리
 class ManagerNotifier extends Notifier<void> {
   @override
   void build() {
   }
 
   Future<void> approveAssignment(String assignmentId) async {
-    print("Assignment $assignmentId Approved!");
+    // [수정] print -> debugPrint
+    debugPrint("Assignment $assignmentId Approved!");
   }
 }
 

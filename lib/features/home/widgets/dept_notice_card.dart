@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/constants/department_enum.dart';
+import '../../../core/data/supabase_repository.dart';
 
 class DeptNoticeCard extends StatelessWidget {
   final Department dept;
@@ -9,32 +10,54 @@ class DeptNoticeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: kCardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: dept.color.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            "🔥 이번 주 정기 세션 안내",
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: SupabaseRepository().getNotices(dept.id),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: kCardColor,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey[800]!),
             ),
+            child: const Text("등록된 공지사항이 없습니다.", style: TextStyle(color: Colors.grey)),
+          );
+        }
+
+        final notice = snapshot.data!.first;
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: kCardColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: dept.color.withValues(alpha: 0.3)),
           ),
-          const SizedBox(height: 8),
-          Text(
-            "장소: 경영관 B103호\n시간: 금요일 18:00\n준비물: 개인 노트북 및 열정",
-            style: TextStyle(color: Colors.grey[400], height: 1.5),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                notice['title'] ?? 'No Title',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                notice['content'] ?? '',
+                style: TextStyle(color: Colors.grey[400], height: 1.5),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
-        ],
-      ),
-    ).animate().slideX(duration: 500.ms, curve: Curves.easeOut);
+        ).animate().slideX(duration: 500.ms, curve: Curves.easeOut);
+      },
+    );
   }
 }

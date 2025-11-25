@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../../core/constants/department_enum.dart'; // kCardColor
+// [수정] 사용하지 않는 go_router import 제거
+import '../../core/constants/department_enum.dart';
 import 'auth_provider.dart';
 
 class LoginScreen extends ConsumerWidget {
@@ -61,14 +61,17 @@ class _DepartmentLoginButton extends ConsumerWidget {
           ref.read(authProvider.notifier).login(dept);
         },
         borderRadius: BorderRadius.circular(12),
-        splashColor: dept.color.withOpacity(0.3), // 수정됨
+        // [수정] withOpacity -> withValues
+        splashColor: dept.color.withValues(alpha: 0.3),
         child: Ink(
           height: 64,
           decoration: BoxDecoration(
             color: kCardColor,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: dept.color.withOpacity(0.5), width: 1.5), // 수정됨
-            boxShadow: [BoxShadow(color: dept.color.withOpacity(0.15), blurRadius: 12)], // 수정됨
+            // [수정] withOpacity -> withValues
+            border: Border.all(color: dept.color.withValues(alpha: 0.5), width: 1.5),
+            // [수정] withOpacity -> withValues
+            boxShadow: [BoxShadow(color: dept.color.withValues(alpha: 0.15), blurRadius: 12)],
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,

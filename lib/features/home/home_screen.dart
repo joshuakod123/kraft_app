@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:go_router/go_router.dart'; // go_router 추가
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/constants/department_enum.dart';
 import '../../core/state/global_providers.dart';
+import 'widgets/dept_notice_card.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -36,7 +38,6 @@ class HomeScreen extends ConsumerWidget {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      // [수정] withValues
                       dept.color.withValues(alpha: 0.25),
                       kAppBackgroundColor,
                     ],
@@ -56,19 +57,12 @@ class HomeScreen extends ConsumerWidget {
                 IconButton(
                   icon: const Icon(Icons.add_circle_outline),
                   color: dept.color,
-                  tooltip: 'Add Curriculum',
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('[Manager] 커리큘럼 추가 모드'),
-                        backgroundColor: dept.color,
-                      ),
-                    );
-                  },
+                  onPressed: () => context.push('/qr_create'), // 관리자용 QR 생성
                 ),
               IconButton(
                 icon: const Icon(Icons.qr_code_scanner),
-                onPressed: () {},
+                // [수정] QR 스캔 화면으로 이동
+                onPressed: () => context.push('/attendance_scan'),
               ),
               const SizedBox(width: 8),
             ],
@@ -95,39 +89,14 @@ class HomeScreen extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 10),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: kCardColor,
-                      borderRadius: BorderRadius.circular(16),
-                      // [수정] withValues
-                      border: Border.all(color: dept.color.withValues(alpha: 0.3)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "🔥 이번 주 정기 세션 안내",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          "장소: 경영관 B103호\n시간: 금요일 18:00\n준비물: 개인 노트북 및 열정",
-                          style: TextStyle(color: Colors.grey[400], height: 1.5),
-                        ),
-                      ],
-                    ),
-                  ).animate().slideX(duration: 500.ms, curve: Curves.easeOut),
+                  // [수정] 실제 데이터를 받아오는 위젯
+                  DeptNoticeCard(dept: dept),
                 ],
               ),
             ),
           ),
 
+          // ... (Curriculum List 등 기존 코드 유지) ...
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             sliver: SliverList(
@@ -142,7 +111,7 @@ class HomeScreen extends ConsumerWidget {
                     ).animate().fadeIn(delay: (100 * index).ms).slideY(begin: 0.1),
                   );
                 },
-                childCount: 8,
+                childCount: 4, // 일단 4개만
               ),
             ),
           ),
@@ -176,44 +145,16 @@ class _CurriculumCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  // [수정] withValues
                   color: deptColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(
-                  'WEEK $week',
-                  style: TextStyle(
-                    color: deptColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
+                child: Text('WEEK $week', style: TextStyle(color: deptColor, fontWeight: FontWeight.bold, fontSize: 12)),
               ),
               Icon(Icons.chevron_right, color: Colors.grey[600]),
             ],
           ),
           const SizedBox(height: 12),
-          const Text(
-            'Interactive Media Design Project',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Using Flutter & Supabase to create something cool.',
-            style: TextStyle(color: Colors.grey[400], fontSize: 14),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Icon(Icons.circle_outlined, size: 14, color: Colors.grey[600]),
-              const SizedBox(width: 6),
-              Text('Pending', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-            ],
-          ),
+          const Text('Interactive Media Design', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
         ],
       ),
     );
