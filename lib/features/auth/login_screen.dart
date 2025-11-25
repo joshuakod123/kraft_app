@@ -1,88 +1,147 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-// [수정] 사용하지 않는 go_router import 제거
-import '../../core/constants/department_enum.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:glass_kit/glass_kit.dart';
 import 'auth_provider.dart';
 
-class LoginScreen extends ConsumerWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'KRAFT',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold, letterSpacing: 8, color: Colors.white),
-              ).animate().fadeIn(duration: 800.ms).scale(),
-
-              const SizedBox(height: 10),
-              Text(
-                  'MEDIA & ENTERTAINMENT GROUP',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey[600], letterSpacing: 2)
-              ).animate().fadeIn(delay: 300.ms),
-
-              const SizedBox(height: 60),
-              const Text('SELECT YOUR DEPARTMENT', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 12)),
-              const SizedBox(height: 20),
-
-              ...Department.values.map((dept) => Padding(
-                padding: const EdgeInsets.only(bottom: 16.0),
-                child: _DepartmentLoginButton(dept: dept),
-              )).toList().animate(interval: 100.ms).slideX(begin: 0.2, end: 0).fadeIn(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _DepartmentLoginButton extends ConsumerWidget {
-  final Department dept;
-  const _DepartmentLoginButton({required this.dept});
+class _LoginScreenState extends ConsumerState<LoginScreen> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _isLoginMode = true; // 로그인 vs 회원가입 모드
+  bool _isLoading = false;
+
+  Future<void> _submit() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('이메일과 비밀번호를 입력해주세요.')));
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      if (_isLoginMode) {
+        await ref.read(authProvider.notifier).login(email, password);
+      } else {
+        await ref.read(authProvider.notifier).signUp(email, password);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('회원가입 성공! 로그인해주세요.')));
+          setState(() => _isLoginMode = true); // 가입 후 로그인 모드로 전환
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('오류 발생: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          ref.read(authProvider.notifier).login(dept);
-        },
-        borderRadius: BorderRadius.circular(12),
-        // [수정] withOpacity -> withValues
-        splashColor: dept.color.withValues(alpha: 0.3),
-        child: Ink(
-          height: 64,
-          decoration: BoxDecoration(
-            color: kCardColor,
-            borderRadius: BorderRadius.circular(12),
-            // [수정] withOpacity -> withValues
-            border: Border.all(color: dept.color.withValues(alpha: 0.5), width: 1.5),
-            // [수정] withOpacity -> withValues
-            boxShadow: [BoxShadow(color: dept.color.withValues(alpha: 0.15), blurRadius: 12)],
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/images/logo.png'), // 배경 이미지가 있다면 교체
+            fit: BoxFit.cover,
+            opacity: 0.2, // 어둡게 처리
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(dept.icon, color: dept.color, size: 28),
-              const SizedBox(width: 16),
-              Text(
-                  dept.name,
-                  style: TextStyle(color: dept.color, fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 1.5)
-              ),
-            ],
+          color: Colors.black,
+        ),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                const Text(
+                  'KRAFT',
+                  style: TextStyle(
+                      fontSize: 48,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      letterSpacing: 8
+                  ),
+                ).animate().fadeIn().moveY(begin: -20, end: 0),
+                const SizedBox(height: 50),
+
+                GlassContainer.clearGlass(
+                  height: 400,
+                  width: double.infinity,
+                  borderRadius: BorderRadius.circular(20),
+                  borderWidth: 1.0,
+                  borderColor: Colors.white.withValues(alpha: 0.3),
+                  elevation: 10,
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        _isLoginMode ? 'MEMBER LOGIN' : 'JOIN KRAFT',
+                        style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 30),
+                      TextField(
+                        controller: _emailController,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: 'Email',
+                          hintStyle: TextStyle(color: Colors.grey[400]),
+                          prefixIcon: const Icon(Icons.email, color: Colors.white),
+                          enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white54)),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      TextField(
+                        controller: _passwordController,
+                        obscureText: true,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: 'Password',
+                          hintStyle: TextStyle(color: Colors.grey[400]),
+                          prefixIcon: const Icon(Icons.lock, color: Colors.white),
+                          enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white54)),
+                        ),
+                      ),
+                      const SizedBox(height: 40),
+                      _isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          onPressed: _submit,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.black,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: Text(_isLoginMode ? 'ENTER' : 'SIGN UP', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextButton(
+                        onPressed: () => setState(() => _isLoginMode = !_isLoginMode),
+                        child: Text(
+                          _isLoginMode ? 'Create an account' : 'Already have an account?',
+                          style: const TextStyle(color: Colors.white70),
+                        ),
+                      )
+                    ],
+                  ),
+                ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.2, end: 0),
+              ],
+            ),
           ),
         ),
       ),

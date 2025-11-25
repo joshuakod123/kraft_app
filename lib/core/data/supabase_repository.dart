@@ -9,15 +9,61 @@ class SupabaseRepository {
   // --- Auth & User ---
   User? get currentUser => _client.auth.currentUser;
 
+  Future<String?> signIn({required String email, required String password}) async {
+    try {
+      await _client.auth.signInWithPassword(email: email, password: password);
+      return null; // 성공 시 에러 없음
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  Future<String?> signUp({required String email, required String password}) async {
+    try {
+      await _client.auth.signUp(email: email, password: password);
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
   Future<Map<String, dynamic>?> getUserProfile() async {
     try {
       final userId = _client.auth.currentUser?.id;
       if (userId == null) return null;
-      final data = await _client.from('users').select().eq('id', userId).single();
+
+      final data = await _client.from('users').select().eq('id', userId).maybeSingle();
       return data;
     } catch (e) {
       debugPrint('Profile Fetch Error: $e');
       return null;
+    }
+  }Future<bool> updateUserProfile({
+    required String name,
+    required String studentId,
+    required String major,
+    required String phone,
+    required int teamId,
+  }) async {
+    try {
+      final user = _client.auth.currentUser;
+      if (user == null) return false;
+
+      // upsert: 있으면 수정, 없으면 생성
+      await _client.from('users').upsert({
+        'id': user.id,
+        'email': user.email,
+        'name': name,
+        'student_id': studentId,
+        'major': major,
+        'phone': phone,
+        'team_id': teamId,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+      return true;
+    } catch (e) {
+      debugPrint('Update Profile Error: $e');
+      return false;
     }
   }
 

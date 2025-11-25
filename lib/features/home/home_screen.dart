@@ -1,17 +1,41 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:go_router/go_router.dart'; // go_router 추가
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // 추가
 import '../../core/constants/department_enum.dart';
 import '../../core/state/global_providers.dart';
+import '../../core/data/supabase_repository.dart';
 import 'widgets/dept_notice_card.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  String _userName = 'Member';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserName();
+  }
+
+  Future<void> _loadUserName() async {
+    final profile = await SupabaseRepository().getUserProfile();
+    if (mounted && profile != null) {
+      setState(() {
+        _userName = profile['name'] ?? 'Member';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final dept = ref.watch(currentDeptProvider);
     final isManager = ref.watch(isManagerProvider);
 
@@ -19,18 +43,34 @@ class HomeScreen extends ConsumerWidget {
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 220.0,
+            expandedHeight: 240.0,
             floating: false,
             pinned: true,
             backgroundColor: kAppBackgroundColor,
             flexibleSpace: FlexibleSpaceBar(
               titlePadding: const EdgeInsets.only(left: 16, bottom: 16),
-              title: Text(
-                'KRAFT ${dept.name}',
-                style: GoogleFonts.chakraPetch(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
+              centerTitle: false,
+              title: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Welcome, $_userName', // [수정] 사용자 이름 표시
+                    style: GoogleFonts.inter(
+                      fontSize: 10, // 작게 표시
+                      color: Colors.white70,
+                      fontWeight: FontWeight.normal,
+                    ),
+                  ),
+                  Text(
+                    'KRAFT ${dept.name}',
+                    style: GoogleFonts.chakraPetch(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      fontSize: 18,
+                    ),
+                  ),
+                ],
               ),
               background: Container(
                 decoration: BoxDecoration(
@@ -53,27 +93,29 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
             actions: [
+              // 관리자일 때만 QR 생성 버튼 보임
               if (isManager)
                 IconButton(
                   icon: const Icon(Icons.add_circle_outline),
                   color: dept.color,
-                  onPressed: () => context.push('/qr_create'), // 관리자용 QR 생성
+                  onPressed: () => context.push('/qr_create'),
                 ),
               IconButton(
                 icon: const Icon(Icons.qr_code_scanner),
-                // [수정] QR 스캔 화면으로 이동
                 onPressed: () => context.push('/attendance_scan'),
               ),
               const SizedBox(width: 8),
             ],
           ),
 
+          // ... (이하 기존 코드 동일: Notice, Curriculum 등)
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // ... 기존 Notice Card 코드 ...
                   Row(
                     children: [
                       Icon(Icons.campaign, color: dept.color, size: 18),
@@ -89,14 +131,12 @@ class HomeScreen extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 10),
-                  // [수정] 실제 데이터를 받아오는 위젯
                   DeptNoticeCard(dept: dept),
                 ],
               ),
             ),
           ),
 
-          // ... (Curriculum List 등 기존 코드 유지) ...
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             sliver: SliverList(
@@ -111,7 +151,7 @@ class HomeScreen extends ConsumerWidget {
                     ).animate().fadeIn(delay: (100 * index).ms).slideY(begin: 0.1),
                   );
                 },
-                childCount: 4, // 일단 4개만
+                childCount: 4,
               ),
             ),
           ),
@@ -122,6 +162,7 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
+// _CurriculumCard 클래스는 기존과 동일하므로 유지해주세요.
 class _CurriculumCard extends StatelessWidget {
   final int week;
   final Color deptColor;

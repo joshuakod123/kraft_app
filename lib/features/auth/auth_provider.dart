@@ -2,54 +2,92 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/constants/department_enum.dart';
 import '../../core/state/global_providers.dart';
-import '../../core/data/supabase_repository.dart'; // Repo import
+import '../../core/data/supabase_repository.dart';
 
-class AuthNotifier extends Notifier<bool> {
+// 인증 상태: Unauthenticated, OnboardingRequired, Authenticated
+enum AuthStatus { unauthenticated, onboardingRequired, authenticated }
+
+class AuthNotifier extends Notifier<AuthStatus> {
   final _repo = SupabaseRepository();
 
   @override
-  bool build() {
-    // 앱 시작 시 세션 복구 시도
+  AuthStatus build() {
     _restoreSession();
-    return false;
+    return AuthStatus.unauthenticated;
   }
 
   Future<void> _restoreSession() async {
     final session = Supabase.instance.client.auth.currentSession;
     if (session != null) {
-      // 세션이 있으면 유저 프로필(부서 정보) 가져오기
-      final profile = await _repo.getUserProfile();
-      if (profile != null) {
-        final teamId = profile['team_id'] as int?;
-        // teamId에 맞는 Department Enum 찾기 (기본값 Business)
-        final dept = Department.values.firstWhere(
-                (d) => d.id == teamId,
-            orElse: () => Department.business
-        );
-
-        ref.read(currentDeptProvider.notifier).setDept(dept);
-        ref.read(isManagerProvider.notifier).setManager(profile['role'] == 'manager');
-        state = true; // 로그인 성공
-      }
+      await _checkProfile();
     }
   }
 
-  Future<void> login(Department dept) async {
-    // [실제 구현 시] Supabase Auth 로그인 로직 (Google/Email)이 들어갈 곳.
-    // 현재는 데모용으로 익명 로그인 + 부서 선택 방식 유지
+  Future<void> _checkProfile() async {
+    final profile = await _repo.getUserProfile();
+    if (profile == null) {
+      // 로그인은 됐는데 DB에 정보가 없음 -> 온보딩 필요
+      state = AuthStatus.onboardingRequired;
+    } else {
+      // 정보가 있음 -> 메인으로
+      _setGlobalState(profile);
+      state = AuthStatus.authenticated;
+    }
+  }
 
-    // 1. 전역 상태 업데이트
+  void _setGlobalState(Map<String, dynamic> profile) {
+    final teamId = profile['team_id'] as int?;
+    final dept = Department.values.firstWhere(
+            (d) => d.id == teamId,
+        orElse: () => Department.business
+    );
+
     ref.read(currentDeptProvider.notifier).setDept(dept);
-    ref.read(isManagerProvider.notifier).setManager(dept == Department.business);
+    ref.read(isManagerProvider.notifier).setManager(profile['role'] == 'manager');
+    // 사용자 이름 저장 (임시로 isManagerProvider 옆에 저장하거나 별도 Provider 필요)
+    // 여기선 간단히 ref.read를 통해 어딘가 저장했다고 가정하거나, DB에서 매번 불러올 수도 있음
+  }
 
-    // 2. 상태 변경 -> Router 리다이렉트 트리거
-    state = true;
+  Future<void> login(String email, String password) async {
+    final error = await _repo.signIn(email: email, password: password);
+    if (error != null) throw error;
+    await _checkProfile();
+  }
+
+  Future<void> signUp(String email, String password) async {
+    final error = await _repo.signUp(email: email, password: password);
+    if (error != null) throw error;
+    // 회원가입 직후에는 프로필이 없으므로 온보딩으로 가야 함 (로그인 되면)
+  }
+
+  Future<void> completeOnboarding({
+    required String name,
+    required String studentId,
+    required String major,
+    required String phone,
+    required Department dept,
+  }) async {
+    final success = await _repo.updateUserProfile(
+      name: name,
+      studentId: studentId,
+      major: major,
+      phone: phone,
+      teamId: dept.id,
+    );
+
+    if (success) {
+      // 전역 상태 갱신
+      ref.read(currentDeptProvider.notifier).setDept(dept);
+      state = AuthStatus.authenticated;
+    } else {
+      throw "Failed to update profile";
+    }
   }
 
   Future<void> logout() async {
     await Supabase.instance.client.auth.signOut();
-    state = false;
+    state = AuthStatus.unauthenticated;
   }
 }
 
-final authProvider = NotifierProvider<AuthNotifier, bool>(AuthNotifier.new);
+final authProvider = NotifierProvider<AuthNotifier, AuthStatus>(AuthNotifier.new);

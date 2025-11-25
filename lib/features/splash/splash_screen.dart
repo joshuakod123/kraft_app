@@ -1,72 +1,35 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../../core/constants/department_enum.dart';
-import '../auth/auth_provider.dart';
+import '../../core/constants/department_enum.dart'; // 색상 사용을 위해
 
-class SplashScreen extends ConsumerStatefulWidget {
+class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
-
-  @override
-  ConsumerState<SplashScreen> createState() => _SplashScreenState();
-}
-
-class _SplashScreenState extends ConsumerState<SplashScreen> {
-  @override
-  void initState() {
-    super.initState();
-    Future.delayed(const Duration(milliseconds: 3500), () {
-      if (mounted) {
-        final isLoggedIn = ref.read(authProvider);
-        context.go(isLoggedIn ? '/home' : '/login');
-      }
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kAppBackgroundColor,
+      backgroundColor: Colors.black,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              width: 200,
-              height: 200,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                image: const DecorationImage(
-                  image: AssetImage('assets/images/logo.png'), // 로고 파일명 확인
-                  fit: BoxFit.cover,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    // [수정] 최신 문법 withValues 사용
-                    color: Colors.white.withValues(alpha: 0.2),
-                    blurRadius: 30,
-                    spreadRadius: 5,
-                  )
-                ],
-              ),
+            // 로고 이미지 (글자는 이미지 안에 있다고 가정)
+            Image.asset(
+              'assets/images/logo.png',
+              width: 180,
             ).animate()
-                .fadeIn(duration: 1000.ms)
-                .scale(begin: const Offset(0.8, 0.8), end: const Offset(1.1, 1.1), duration: 3000.ms)
-                .then(delay: 500.ms)
-                .fadeOut(duration: 500.ms),
+                .fade(duration: 1000.ms)
+                .scale(delay: 200.ms, duration: 800.ms, curve: Curves.easeOutBack),
+
+            // [수정] 아래 텍스트 제거 (이미지에 포함되어 있으므로)
+            // const SizedBox(height: 24),
+            // const Text('KRAFT', ...),
 
             const SizedBox(height: 40),
-
-            const Text(
-              'KRAFT',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 8,
-              ),
-            ).animate().fadeIn(delay: 500.ms, duration: 800.ms),
+            const CircularProgressIndicator(
+              color: Colors.white,
+              strokeWidth: 2,
+            ).animate().fadeIn(delay: 1000.ms),
           ],
         ),
       ),
