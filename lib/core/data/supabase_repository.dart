@@ -9,6 +9,7 @@ class SupabaseRepository {
   // --- Auth & User ---
   User? get currentUser => _client.auth.currentUser;
 
+  // 로그인
   Future<String?> signIn({required String email, required String password}) async {
     try {
       await _client.auth.signInWithPassword(email: email, password: password);
@@ -18,6 +19,7 @@ class SupabaseRepository {
     }
   }
 
+  // 회원가입
   Future<String?> signUp({required String email, required String password}) async {
     try {
       await _client.auth.signUp(email: email, password: password);
@@ -26,15 +28,56 @@ class SupabaseRepository {
       return e.toString();
     }
   }
+
+  // 프로필 조회 (수정됨: 에러 방지를 위해 maybeSingle 사용)
   Future<Map<String, dynamic>?> getUserProfile() async {
     try {
       final userId = _client.auth.currentUser?.id;
       if (userId == null) return null;
-      final data = await _client.from('users').select().eq('id', userId).single();
+
+      // single()은 데이터가 없으면 에러를 뿜지만, maybeSingle()은 null을 반환해 안전합니다.
+      final data = await _client.from('users').select().eq('id', userId).maybeSingle();
       return data;
     } catch (e) {
       debugPrint('Profile Fetch Error: $e');
       return null;
+    }
+  }
+
+  // [핵심 수정] 프로필 업데이트 기능 구현 (온보딩 화면에서 사용)
+  Future<bool> updateUserProfile({
+    required String name,
+    required String studentId,
+    required String major,
+    required String phone,
+    required int teamId,
+  }) async {
+    try {
+      final user = _client.auth.currentUser;
+      if (user == null) {
+        debugPrint("❌ Error: No authenticated user found.");
+        return false;
+      }
+
+      debugPrint("🚀 Updating profile for: ${user.id}");
+
+      // upsert: 기존 데이터가 있으면 수정하고, 없으면 새로 만듭니다.
+      await _client.from('users').upsert({
+        'id': user.id,
+        'email': user.email,
+        'name': name,
+        'student_id': studentId,
+        'major': major,
+        'phone': phone,
+        'team_id': teamId,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+
+      debugPrint("✅ Profile update successful!");
+      return true;
+    } catch (e) {
+      debugPrint("❌ Profile Update Error: $e");
+      return false;
     }
   }
 
@@ -93,16 +136,13 @@ class SupabaseRepository {
 
   // --- Attendance (QR) ---
   Future<bool> markAttendance(String qrData) async {
-    // QR 데이터 형식 검증 (예: "KRAFT_ATTENDANCE_2025...")
+    // QR 데이터 형식 검증
     if (!qrData.startsWith("KRAFT_ATTENDANCE")) return false;
 
     try {
-      // 현재 주차 계산 로직이 필요하지만, 편의상 1주차로 하드코딩하거나
-      // QR 데이터에 주차 정보를 넣어서 파싱하는 것이 좋습니다.
-      // 여기서는 DB에 insert만 수행합니다.
       await _client.from('attendances').insert({
         'user_id': _client.auth.currentUser!.id,
-        'week_number': 1, // 실제 로직에선 동적으로 변경 필요
+        'week_number': 1,
         'check_in_time': DateTime.now().toIso8601String(),
       });
       return true;
@@ -118,7 +158,7 @@ class SupabaseRepository {
       final response = await _client
           .from('tracks')
           .select()
-          .eq('team_id', teamId) // 내 부서 음악만 듣기 (옵션)
+          .eq('team_id', teamId)
           .order('created_at', ascending: false);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
@@ -135,12 +175,10 @@ class SupabaseRepository {
           .select()
           .eq('team_id', teamId)
           .order('created_at', ascending: false)
-          .limit(1); // 최신 1개만
+          .limit(1);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       return [];
     }
   }
-
-  updateUserProfile({required String name, required String studentId, required String major, required String phone, required int teamId}) {}
 }

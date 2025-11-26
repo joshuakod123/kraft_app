@@ -80,16 +80,19 @@ class AuthNotifier extends Notifier<AuthStatus> {
     );
 
     if (success) {
+      // 전역 상태 설정
       ref.read(currentDeptProvider.notifier).setDept(dept);
+      // 상태 변경 (Router가 감지)
       state = AuthStatus.authenticated;
     } else {
-      throw "프로필 업데이트 실패";
+      // 실패 시 에러 throw -> OnboardingScreen에서 catch함
+      throw "프로필 저장 중 오류가 발생했습니다. DB 연결을 확인하세요.";
     }
   }
 
   Future<void> logout() async {
     await Supabase.instance.client.auth.signOut();
-    state = AuthStatus.unauthenticated; // 라우터가 이걸 보고 로그인 화면으로 보냄
+    state = AuthStatus.unauthenticated;
   }
 }
 

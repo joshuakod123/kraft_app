@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart'; // go_router import 필수
 import '../../core/constants/department_enum.dart';
 import 'auth_provider.dart';
 
@@ -21,24 +22,35 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   Future<void> _complete() async {
     if (!_formKey.currentState!.validate() || _selectedDept == null) {
-      if (_selectedDept == null) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('소속 팀을 선택해주세요.')));
+      if (_selectedDept == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('소속 팀을 선택해주세요.')));
+      }
       return;
     }
 
     setState(() => _isLoading = true);
+
     try {
+      // 1. 프로필 업데이트 요청
       await ref.read(authProvider.notifier).completeOnboarding(
-        name: _nameCtrl.text,
-        studentId: _studentIdCtrl.text,
-        major: _majorCtrl.text,
-        phone: _phoneCtrl.text,
+        name: _nameCtrl.text.trim(),
+        studentId: _studentIdCtrl.text.trim(),
+        major: _majorCtrl.text.trim(),
+        phone: _phoneCtrl.text.trim(),
         dept: _selectedDept!,
       );
-    } catch (e) {
+
+      // 2. [핵심 수정] 성공 시 강제로 홈으로 이동 (Router가 반응하기 전에 먼저 보냄)
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-        setState(() => _isLoading = false);
+        context.go('/home');
       }
+    } catch (e) {
+      // 실패 시 에러 메시지 표시
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('저장 실패: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -52,8 +64,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () {
-            // [핵심] 뒤로가기 누르면 로그아웃 -> 로그인 화면으로 이동
-            ref.read(authProvider.notifier).logout();
+            ref.read(authProvider.notifier).logout(); // 뒤로가기 시 로그아웃
           },
         ),
       ),
@@ -64,9 +75,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text("학회원 정보를 입력해주세요.", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+              const Text("환영합니다! 👋", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              const Text("입력하신 정보로 로그인이 유지됩니다.", style: TextStyle(color: Colors.white54, fontSize: 14)),
+              const Text("원활한 활동을 위해 기본 정보를 입력해주세요.", style: TextStyle(color: Colors.white54, fontSize: 14)),
               const SizedBox(height: 30),
               _buildField("이름 (Name)", _nameCtrl),
               _buildField("학번 (Student ID)", _studentIdCtrl),
@@ -77,17 +88,29 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 dropdownColor: Colors.grey[900],
                 value: _selectedDept,
                 hint: const Text("소속 팀 선택", style: TextStyle(color: Colors.grey)),
-                items: Department.values.map((dept) => DropdownMenuItem(value: dept, child: Text(dept.name, style: TextStyle(color: dept.color)))).toList(),
+                items: Department.values.map((dept) {
+                  return DropdownMenuItem(
+                    value: dept,
+                    child: Text(dept.name, style: TextStyle(color: dept.color)),
+                  );
+                }).toList(),
                 onChanged: (val) => setState(() => _selectedDept = val),
-                decoration: InputDecoration(filled: true, fillColor: Colors.grey[900], border: OutlineInputBorder(borderRadius: BorderRadius.circular(10))),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: Colors.grey[900],
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
               const SizedBox(height: 40),
               SizedBox(
-                width: double.infinity, height: 56,
+                width: double.infinity,
+                height: 56,
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _complete,
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.white),
-                  child: _isLoading ? const CircularProgressIndicator() : const Text("START KRAFT", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                  child: _isLoading
+                      ? const CircularProgressIndicator()
+                      : const Text("START KRAFT", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
                 ),
               )
             ],
@@ -104,7 +127,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         controller: controller,
         style: const TextStyle(color: Colors.white),
         validator: (val) => val == null || val.isEmpty ? '필수 입력입니다.' : null,
-        decoration: InputDecoration(labelText: label, labelStyle: const TextStyle(color: Colors.grey), filled: true, fillColor: Colors.grey[900], border: OutlineInputBorder(borderRadius: BorderRadius.circular(10))),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: Colors.grey),
+          filled: true,
+          fillColor: Colors.grey[900],
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        ),
       ),
     );
   }
