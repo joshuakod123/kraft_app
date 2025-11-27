@@ -13,6 +13,8 @@ import '../../features/streaming/stream_screen.dart';
 import '../../features/splash/splash_screen.dart';
 import '../../features/admin/qr_create_screen.dart';
 import '../../features/attendance/attendance_scan_screen.dart';
+import '../../features/archive/archive_screen.dart'; // [신규]
+import '../../features/profile/profile_screen.dart'; // [신규]
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authStateListenable = ValueNotifier<AuthStatus>(AuthStatus.initial);
@@ -30,22 +32,20 @@ final routerProvider = Provider<GoRouter>((ref) {
       final status = ref.read(authProvider);
       final goingTo = state.uri.toString();
 
-      // 1. 로딩 중 -> 스플래시 고정
-      if (status == AuthStatus.initial) return '/splash';
-
-      // 2. 로그인 안 됨 -> 로그인 화면으로
+      if (status == AuthStatus.initial) {
+        if (goingTo != '/splash') return '/splash';
+        return null;
+      }
       if (status == AuthStatus.unauthenticated) {
         if (goingTo != '/login') return '/login';
+        return null;
       }
-
-      // 3. 정보 입력 필요 -> 온보딩으로 (여기서 갇히지 않게 OnboardingScreen에 로그아웃 추가함)
       if (status == AuthStatus.onboardingRequired) {
         if (goingTo != '/onboarding') return '/onboarding';
+        return null;
       }
-
-      // 4. 로그인 완료 -> 홈으로
       if (status == AuthStatus.authenticated) {
-        if (goingTo == '/login' || goingTo == '/onboarding' || goingTo == '/splash') {
+        if (goingTo == '/splash' || goingTo == '/login' || goingTo == '/onboarding') {
           return '/home';
         }
       }
@@ -54,9 +54,18 @@ final routerProvider = Provider<GoRouter>((ref) {
 
     routes: [
       GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()),
-      GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
-      GoRoute(path: '/onboarding', builder: (context, state) => const OnboardingScreen()),
 
+      // [Fade Effect] 로그인 화면
+      GoRoute(
+        path: '/login',
+        pageBuilder: (context, state) => CustomTransitionPage(
+          key: state.pageKey,
+          child: const LoginScreen(),
+          transitionsBuilder: (context, animation, _, child) => FadeTransition(opacity: animation, child: child),
+        ),
+      ),
+
+      GoRoute(path: '/onboarding', builder: (context, state) => const OnboardingScreen()),
       GoRoute(path: '/qr_create', builder: (context, state) => const QrCreateScreen()),
       GoRoute(path: '/attendance_scan', builder: (context, state) => const AttendanceScanScreen()),
 
@@ -68,12 +77,35 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
 
+      // [메인 쉘 - 5개 탭]
       ShellRoute(
         builder: (context, state, child) => MainShell(child: child),
         routes: [
-          GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
-          GoRoute(path: '/archive', builder: (context, state) => const CurriculumListScreen()),
-          GoRoute(path: '/stream', builder: (context, state) => const StreamScreen()),
+          // 1. Home
+          GoRoute(
+            path: '/home',
+            pageBuilder: (context, state) => NoTransitionPage(child: const HomeScreen()),
+          ),
+          // 2. Upcoming (기존 Curriculum 화면)
+          GoRoute(
+            path: '/upcoming',
+            pageBuilder: (context, state) => NoTransitionPage(child: const CurriculumListScreen()),
+          ),
+          // 3. Archive (내가 올린 파일 목록)
+          GoRoute(
+            path: '/archive',
+            pageBuilder: (context, state) => NoTransitionPage(child: const ArchiveScreen()),
+          ),
+          // 4. Streaming
+          GoRoute(
+            path: '/stream',
+            pageBuilder: (context, state) => NoTransitionPage(child: const StreamScreen()),
+          ),
+          // 5. Profile
+          GoRoute(
+            path: '/profile',
+            pageBuilder: (context, state) => NoTransitionPage(child: const ProfileScreen()),
+          ),
         ],
       ),
     ],
