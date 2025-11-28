@@ -22,10 +22,8 @@ class ProfileScreen extends ConsumerWidget {
           final user = snapshot.data;
           final name = user?['name'] ?? 'Member';
           final major = user?['major'] ?? 'Unknown';
-          final studentId = user?['student_id'] ?? '---';
+          // [삭제됨] studentId
           final teamId = user?['team_id'] ?? 1;
-
-          // Enum에서 팀 정보 찾기 (기본값 Business)
           final dept = Department.values.firstWhere((d) => d.id == teamId, orElse: () => Department.business);
 
           return SafeArea(
@@ -54,7 +52,7 @@ class ProfileScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 40),
 
-                  _buildInfoTile("Student ID", studentId),
+                  // [삭제됨] 학번 Tile
                   _buildInfoTile("Major", major),
                   _buildInfoTile("Email", SupabaseRepository().currentUser?.email ?? ''),
                   _buildInfoTile("Phone", user?['phone'] ?? ''),
@@ -75,7 +73,7 @@ class ProfileScreen extends ConsumerWidget {
                       child: const Text("LOGOUT", style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
-                  const SizedBox(height: 80), // 하단 바 공간 확보
+                  const SizedBox(height: 80),
                 ],
               ),
             ),

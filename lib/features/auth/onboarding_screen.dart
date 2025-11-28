@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart'; // go_router import 필수
+import 'package:go_router/go_router.dart';
 import '../../core/constants/department_enum.dart';
 import 'auth_provider.dart';
 
@@ -14,7 +14,7 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
-  final _studentIdCtrl = TextEditingController();
+  // studentIdCtrl 제거됨
   final _majorCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   Department? _selectedDept;
@@ -31,21 +31,17 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // 1. 프로필 업데이트 요청
       await ref.read(authProvider.notifier).completeOnboarding(
         name: _nameCtrl.text.trim(),
-        studentId: _studentIdCtrl.text.trim(),
         major: _majorCtrl.text.trim(),
         phone: _phoneCtrl.text.trim(),
         dept: _selectedDept!,
       );
 
-      // 2. [핵심 수정] 성공 시 강제로 홈으로 이동 (Router가 반응하기 전에 먼저 보냄)
       if (mounted) {
-        context.go('/home');
+        context.go('/home'); // 완료 후 홈으로 이동
       }
     } catch (e) {
-      // 실패 시 에러 메시지 표시
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('저장 실패: $e')));
       }
@@ -64,7 +60,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () {
-            ref.read(authProvider.notifier).logout(); // 뒤로가기 시 로그아웃
+            ref.read(authProvider.notifier).logout();
           },
         ),
       ),
@@ -79,10 +75,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               const SizedBox(height: 8),
               const Text("원활한 활동을 위해 기본 정보를 입력해주세요.", style: TextStyle(color: Colors.white54, fontSize: 14)),
               const SizedBox(height: 30),
+
               _buildField("이름 (Name)", _nameCtrl),
-              _buildField("학번 (Student ID)", _studentIdCtrl),
+              // 학번 필드 삭제됨
               _buildField("학과 (Major)", _majorCtrl),
               _buildField("전화번호 (Phone)", _phoneCtrl),
+
               const SizedBox(height: 20),
               DropdownButtonFormField<Department>(
                 dropdownColor: Colors.grey[900],

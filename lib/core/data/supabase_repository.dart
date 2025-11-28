@@ -8,7 +8,6 @@ class SupabaseRepository {
 
   User? get currentUser => _client.auth.currentUser;
 
-  // --- Auth ---
   Future<String?> signIn({required String email, required String password}) async {
     try {
       await _client.auth.signInWithPassword(email: email, password: password);
@@ -41,7 +40,7 @@ class SupabaseRepository {
 
   Future<bool> updateUserProfile({
     required String name,
-    required String studentId,
+    // studentId 제거됨
     required String major,
     required String phone,
     required int teamId,
@@ -50,54 +49,46 @@ class SupabaseRepository {
       final user = _client.auth.currentUser;
       if (user == null) return false;
 
+      debugPrint("🚀 Updating profile for: ${user.id}");
+
       await _client.from('users').upsert({
         'id': user.id,
         'email': user.email,
         'name': name,
-        'student_id': studentId,
+        // student_id 컬럼 제외
         'major': major,
         'phone': phone,
         'team_id': teamId,
         'updated_at': DateTime.now().toIso8601String(),
       });
+
+      debugPrint("✅ Profile update successful!");
       return true;
     } catch (e) {
-      debugPrint("Profile Update Error: $e");
+      debugPrint("❌ Profile Update Error: $e");
       return false;
     }
   }
 
-  // --- Upcoming (Curriculum) ---
+  // --- 기존 기능들 ---
   Future<List<Map<String, dynamic>>> getCurriculums() async {
     try {
-      final response = await _client
-          .from('curriculums')
-          .select()
-          .order('week_number', ascending: true);
+      final response = await _client.from('curriculums').select().order('week_number', ascending: true);
       return List<Map<String, dynamic>>.from(response);
-    } catch (e) {
-      return [];
-    }
+    } catch (e) { return []; }
   }
 
-  // --- Archive (My Assignments) [신규 추가] ---
   Future<List<Map<String, dynamic>>> getMyAssignments() async {
     try {
       final userId = _client.auth.currentUser?.id;
       if (userId == null) return [];
-
-      // assignments 테이블에서 내 것만 가져오고, 어떤 커리큘럼인지 정보도 같이 가져옴
       final response = await _client
           .from('assignments')
           .select('*, curriculums(title, week_number)')
           .eq('user_id', userId)
           .order('created_at', ascending: false);
-
       return List<Map<String, dynamic>>.from(response);
-    } catch (e) {
-      debugPrint("My Assignments Error: $e");
-      return [];
-    }
+    } catch (e) { return []; }
   }
 
   Future<bool> uploadAssignment(int curriculumId) async {
@@ -106,7 +97,6 @@ class SupabaseRepository {
         type: FileType.custom,
         allowedExtensions: ['pdf', 'zip', 'jpg', 'png'],
       );
-
       if (result == null) return false;
 
       final fileBytes = result.files.first.bytes;
@@ -127,7 +117,6 @@ class SupabaseRepository {
         'content_url': publicUrl,
         'status': 'submitted',
       });
-
       return true;
     } catch (e) {
       debugPrint("Upload Error: $e");
@@ -135,13 +124,12 @@ class SupabaseRepository {
     }
   }
 
-  // --- Etc ---
-  Future<bool> markAttendance(String qrData) async { return true; } // (생략)
+  Future<bool> markAttendance(String qrData) async { return true; }
   Future<List<Map<String, dynamic>>> getNotices(int teamId) async {
     try {
       final response = await _client.from('notices').select().eq('team_id', teamId).order('created_at', ascending: false).limit(1);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) { return []; }
   }
-  Future<List<Map<String, dynamic>>> getTracks(int teamId) async { return []; } // (생략)
+  Future<List<Map<String, dynamic>>> getTracks(int teamId) async { return []; }
 }

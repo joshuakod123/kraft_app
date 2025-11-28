@@ -1,49 +1,62 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/data/supabase_repository.dart';
 
-// 모델 정의
+// 커리큘럼 아이템 모델 확장
 class CurriculumItem {
   final int id;
   final int week;
   final String title;
   final String description;
-  final DateTime deadline;
-  final bool isSubmitted; // 나중에 과제 테이블과 조인해서 확인 필요
+  final DateTime date;
+  final String status; // 'done', 'active', 'upcoming'
 
   CurriculumItem({
     required this.id,
     required this.week,
     required this.title,
     required this.description,
-    required this.deadline,
-    this.isSubmitted = false,
+    required this.date,
+    required this.status,
   });
 
   factory CurriculumItem.fromJson(Map<String, dynamic> json) {
+    // 날짜가 없으면 임의로 생성 (현재 주차 기준)
+    final weekNum = json['week_number'] as int;
+    final now = DateTime.now();
+    // 예시: 1주차는 3주 전이라고 가정
+    final eventDate = now.add(Duration(days: (weekNum - 3) * 7));
+
+    String status = 'upcoming';
+    if (eventDate.isBefore(now.subtract(const Duration(days: 1)))) {
+      status = 'done';
+    } else if (eventDate.isBefore(now.add(const Duration(days: 6)))) {
+      status = 'active';
+    }
+
     return CurriculumItem(
       id: json['id'],
-      week: json['week_number'],
-      title: json['title'],
-      description: json['description'] ?? '',
-      deadline: DateTime.parse(json['deadline']),
-      isSubmitted: false,
+      week: weekNum,
+      title: json['title'] ?? 'No Title',
+      description: json['description'] ?? 'Detailed session description goes here.',
+      date: eventDate,
+      status: status,
     );
   }
 }
 
-// Repository Provider
-final supabaseRepositoryProvider = Provider((ref) => SupabaseRepository());
+class CurriculumNotifier extends Notifier<List<CurriculumItem>> {
+  final _repo = SupabaseRepository();
 
-// 데이터 Fetch Provider (FutureProvider 사용)
-final curriculumListProvider = FutureProvider<List<CurriculumItem>>((ref) async {
-  final repo = ref.watch(supabaseRepositoryProvider);
-
-  // DB에서 데이터 가져오기
-  final data = await repo.getCurriculums();
-
-  if (data.isEmpty) {
-    return []; // 데이터가 없으면 빈 리스트
+  @override
+  List<CurriculumItem> build() {
+    _loadCurriculums();
+    return [];
   }
 
-  return data.map((json) => CurriculumItem.fromJson(json)).toList();
-});
+  Future<void> _loadCurriculums() async {
+    final data = await _repo.getCurriculums();
+    state = data.map((e) => CurriculumItem.fromJson(e)).toList();
+  }
+}
+
+final curriculumProvider = NotifierProvider<CurriculumNotifier, List<CurriculumItem>>(CurriculumNotifier.new);

@@ -12,19 +12,15 @@ class AuthNotifier extends Notifier<AuthStatus> {
 
   @override
   AuthStatus build() {
-    // [중요] 빌드 즉시 초기화 로직 시작
     Future.microtask(() => _initialize());
-    // [중요] 로직이 끝날 때까지는 무조건 'initial' 상태 유지 -> 라우터가 스플래시만 보여주게 됨
     return AuthStatus.initial;
   }
 
   Future<void> _initialize() async {
-    // 1. 스플래시 화면을 볼 시간을 확보 (2.5초 대기)
-    //    이 대기 시간이 없으면 앱이 너무 빨리 로딩되어 스플래시가 번쩍하고 사라집니다.
-    await Future.delayed(const Duration(milliseconds: 2500));
-
-    // 2. 대기 후 세션 체크 시작
-    await _checkSession();
+    await Future.wait([
+      Future.delayed(const Duration(milliseconds: 2500)),
+      _checkSession(),
+    ]);
   }
 
   Future<void> _checkSession() async {
@@ -32,16 +28,13 @@ class AuthNotifier extends Notifier<AuthStatus> {
       final session = Supabase.instance.client.auth.currentSession;
       if (session != null) {
         final profile = await _repo.getUserProfile();
-        // 프로필이 없거나 필수 정보가 비어있으면 -> 온보딩으로
         if (profile == null || profile['name'] == null || profile['team_id'] == null) {
           state = AuthStatus.onboardingRequired;
         } else {
-          // 정보가 다 있으면 -> 메인 홈으로
           _setGlobalState(profile);
           state = AuthStatus.authenticated;
         }
       } else {
-        // 세션이 없으면 -> 로그인 화면으로
         state = AuthStatus.unauthenticated;
       }
     } catch (e) {
@@ -73,14 +66,13 @@ class AuthNotifier extends Notifier<AuthStatus> {
 
   Future<void> completeOnboarding({
     required String name,
-    required String studentId,
+    // studentId 제거됨
     required String major,
     required String phone,
     required Department dept,
   }) async {
     final success = await _repo.updateUserProfile(
       name: name,
-      studentId: studentId,
       major: major,
       phone: phone,
       teamId: dept.id,

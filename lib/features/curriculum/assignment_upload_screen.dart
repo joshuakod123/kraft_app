@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:file_picker/file_picker.dart'; // 추가 필요
 import '../../core/data/supabase_repository.dart';
 import 'curriculum_provider.dart';
 
@@ -24,12 +26,12 @@ class _AssignmentUploadScreenState extends ConsumerState<AssignmentUploadScreen>
       setState(() => _isUploading = false);
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ 과제 제출 완료! (+20 PT)')),
+          const SnackBar(content: Text('✅ Mission Completed! (+20 PT)'), backgroundColor: Colors.green),
         );
         Navigator.pop(context);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('❌ 업로드 실패 또는 취소됨')),
+          const SnackBar(content: Text('Upload Cancelled or Failed'), backgroundColor: Colors.red),
         );
       }
     }
@@ -40,7 +42,12 @@ class _AssignmentUploadScreenState extends ConsumerState<AssignmentUploadScreen>
     final themeColor = Theme.of(context).primaryColor;
 
     return Scaffold(
-      appBar: AppBar(title: Text('WEEK ${widget.item.week} SUBMISSION')),
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        title: Text('WEEK ${widget.item.week} MISSION', style: GoogleFonts.chakraPetch(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -48,27 +55,34 @@ class _AssignmentUploadScreenState extends ConsumerState<AssignmentUploadScreen>
           children: [
             Text(
               widget.item.title,
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              style: GoogleFonts.chakraPetch(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+            Text(
+              widget.item.description,
+              style: const TextStyle(color: Colors.grey, fontSize: 16, height: 1.5),
+            ),
+            const SizedBox(height: 40),
 
             GestureDetector(
               onTap: _isUploading ? null : _pickAndUpload,
               child: Container(
-                height: 200,
+                height: 240,
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey[800]!),
-                  borderRadius: BorderRadius.circular(16),
-                  color: Colors.white.withValues(alpha: 0.05),
+                  border: Border.all(color: themeColor.withValues(alpha: 0.5), width: 2),
+                  borderRadius: BorderRadius.circular(24),
+                  color: themeColor.withValues(alpha: 0.05),
                 ),
                 child: _isUploading
-                    ? const Center(child: CircularProgressIndicator())
+                    ? Center(child: CircularProgressIndicator(color: themeColor))
                     : Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.cloud_upload_outlined, size: 48, color: themeColor),
-                    const SizedBox(height: 12),
-                    const Text('Tap to upload PDF or ZIP'),
+                    Icon(Icons.cloud_upload_rounded, size: 64, color: themeColor),
+                    const SizedBox(height: 16),
+                    Text('Tap to Upload File', style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 8),
+                    const Text('PDF, ZIP, JPG supported', style: TextStyle(color: Colors.grey, fontSize: 12)),
                   ],
                 ),
               ),
