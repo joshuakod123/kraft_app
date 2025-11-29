@@ -1,199 +1,279 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_animate/flutter_animate.dart';
-import 'package:go_router/go_router.dart';
+import 'package:table_calendar/table_calendar.dart';
 import 'package:glass_kit/glass_kit.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/department_enum.dart';
 import '../../core/state/global_providers.dart';
 import '../../core/data/supabase_repository.dart';
-import 'curriculum_provider.dart';
+import 'curriculum_provider.dart'; // CalendarEvent, Provider 사용
 
-class CurriculumListScreen extends ConsumerWidget {
+class CurriculumListScreen extends ConsumerStatefulWidget {
   const CurriculumListScreen({super.key});
 
-  void _showAddDialog(BuildContext context, WidgetRef ref, int teamId) {
+  @override
+  ConsumerState<CurriculumListScreen> createState() => _CurriculumListScreenState();
+}
+
+class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
+  DateTime _focusedDay = DateTime.now();
+  DateTime? _selectedDay;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedDay = DateTime.now();
+  }
+
+  // 날짜별 이벤트 필터링
+  List<CalendarEvent> _getEventsForDay(DateTime day, List<CalendarEvent> allEvents) {
+    return allEvents.where((event) => isSameDay(event.date, day)).toList();
+  }
+
+  void _showAddEventDialog(bool isManager, int teamId) {
     final titleCtrl = TextEditingController();
     final descCtrl = TextEditingController();
-    final weekCtrl = TextEditingController();
+    bool isOfficial = false;
+    DateTime selectedDate = _selectedDay ?? DateTime.now();
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text("Add Curriculum", style: TextStyle(color: Colors.white)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Title', labelStyle: TextStyle(color: Colors.grey)), style: const TextStyle(color: Colors.white)),
-            TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'Description', labelStyle: TextStyle(color: Colors.grey)), style: const TextStyle(color: Colors.white)),
-            TextField(controller: weekCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Week', labelStyle: TextStyle(color: Colors.grey)), style: const TextStyle(color: Colors.white)),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-          ElevatedButton(
-            onPressed: () async {
-              if (titleCtrl.text.isNotEmpty) {
-                final week = int.tryParse(weekCtrl.text) ?? 0;
-                await SupabaseRepository().addCurriculum(titleCtrl.text, descCtrl.text, week, teamId);
-                if (context.mounted) {
-                  Navigator.pop(context);
-                  ref.refresh(curriculumProvider);
-                }
-              }
-            },
-            child: const Text("Add"),
-          )
-        ],
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1E1E1E),
+            title: const Text("Add Schedule", style: TextStyle(color: Colors.white)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isManager)
+                  Row(
+                    children: [
+                      ChoiceChip(
+                        label: const Text("Personal"),
+                        selected: !isOfficial,
+                        onSelected: (v) => setDialogState(() => isOfficial = !v),
+                        selectedColor: Colors.purpleAccent.withValues(alpha: 0.3),
+                        labelStyle: TextStyle(color: !isOfficial ? Colors.white : Colors.grey),
+                      ),
+                      const SizedBox(width: 10),
+                      ChoiceChip(
+                        label: const Text("Official"),
+                        selected: isOfficial,
+                        onSelected: (v) => setDialogState(() => isOfficial = v),
+                        selectedColor: Colors.cyanAccent.withValues(alpha: 0.3),
+                        labelStyle: TextStyle(color: isOfficial ? Colors.black : Colors.grey),
+                      ),
+                    ],
+                  ),
+                const SizedBox(height: 16),
+                TextField(controller: titleCtrl, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'Title', labelStyle: TextStyle(color: Colors.grey))),
+                TextField(controller: descCtrl, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'Description', labelStyle: TextStyle(color: Colors.grey))),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    const Icon(Icons.calendar_today, color: Colors.grey, size: 16),
+                    const SizedBox(width: 8),
+                    Text(DateFormat('yyyy-MM-dd').format(selectedDate), style: const TextStyle(color: Colors.white)),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () async {
+                        final picked = await showDatePicker(context: context, initialDate: selectedDate, firstDate: DateTime(2020), lastDate: DateTime(2030));
+                        if (picked != null) setDialogState(() => selectedDate = picked);
+                      },
+                      child: const Text("Change"),
+                    )
+                  ],
+                )
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+              ElevatedButton(
+                onPressed: () async {
+                  if (titleCtrl.text.isNotEmpty) {
+                    if (isOfficial) {
+                      await SupabaseRepository().addCurriculum(titleCtrl.text, descCtrl.text, selectedDate, teamId);
+                    } else {
+                      await SupabaseRepository().addPersonalSchedule(titleCtrl.text, descCtrl.text, selectedDate);
+                    }
+                    if (context.mounted) Navigator.pop(context);
+                  }
+                },
+                child: const Text("Add"),
+              )
+            ],
+          );
+        },
       ),
     );
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final asyncCurriculum = ref.watch(curriculumProvider);
+  Widget build(BuildContext context) {
+    // [핵심] 이제 여기서 깔끔하게 데이터만 받아옵니다.
+    final allEvents = ref.watch(calendarEventsProvider);
+
     final dept = ref.watch(currentDeptProvider);
     final isManager = ref.watch(isManagerProvider);
+    final selectedEvents = _getEventsForDay(_selectedDay ?? DateTime.now(), allEvents);
 
     return Scaffold(
       backgroundColor: Colors.black,
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: isManager ? Colors.cyanAccent : Colors.purpleAccent,
+        child: const Icon(Icons.add, color: Colors.black),
+        onPressed: () => _showAddEventDialog(isManager, dept.id),
+      ),
       body: CustomScrollView(
         slivers: [
-          SliverAppBar(
-            backgroundColor: Colors.black,
-            pinned: true,
-            expandedHeight: 120.0,
-            actions: [
-              if (isManager)
-                IconButton(
-                  icon: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: dept.color, shape: BoxShape.circle),
-                    child: const Icon(Icons.add, color: Colors.black, size: 20),
-                  ),
-                  onPressed: () => _showAddDialog(context, ref, dept.id),
-                ),
-              const SizedBox(width: 16),
-            ],
-            flexibleSpace: FlexibleSpaceBar(
-              titlePadding: const EdgeInsets.only(left: 20, bottom: 16),
-              title: Text('SEASON PLAN', style: GoogleFonts.chakraPetch(fontWeight: FontWeight.bold, color: Colors.white)),
-            ),
-          ),
-
-          asyncCurriculum.when(
-            data: (list) {
-              if (list.isEmpty) return const SliverFillRemaining(child: Center(child: Text("일정이 없습니다.", style: TextStyle(color: Colors.grey))));
-              return SliverList(
-                delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                    final item = list[index];
-                    return _TimelineItem(
-                        item: item, isLast: index == list.length - 1, deptColor: dept.color, isManager: isManager
-                    ).animate().fadeIn(delay: (50 * index).ms).slideX();
-                  },
-                  childCount: list.length,
-                ),
-              );
-            },
-            error: (err, stack) => SliverFillRemaining(child: Center(child: Text('Error', style: const TextStyle(color: Colors.red)))),
-            loading: () => const SliverFillRemaining(child: Center(child: CircularProgressIndicator())),
-          ),
-          const SliverToBoxAdapter(child: SizedBox(height: 100)),
-        ],
-      ),
-    );
-  }
-}
-
-class _TimelineItem extends ConsumerWidget {
-  final CurriculumItem item;
-  final bool isLast;
-  final Color deptColor;
-  final bool isManager;
-
-  const _TimelineItem({required this.item, required this.isLast, required this.deptColor, required this.isManager});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isActive = item.status == 'active';
-
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 60,
-            child: Column(
-              children: [
-                Text(DateFormat('MM.dd').format(item.date), style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: isActive ? deptColor : Colors.grey, fontSize: 12)),
-                const SizedBox(height: 8),
-                Container(
-                  width: 12, height: 12,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: isActive ? deptColor : Colors.black, border: Border.all(color: isActive ? deptColor : Colors.grey[800]!, width: 2)),
-                ),
-                Expanded(child: isLast ? const SizedBox.shrink() : Container(width: 2, margin: const EdgeInsets.only(top: 4), color: Colors.grey[900])),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
+          SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.only(bottom: 24.0),
-              child: GestureDetector(
-                onTap: () => context.push('/assignment_upload', extra: item),
-                child: GlassContainer.clearGlass(
-                  height: 120, width: double.infinity, borderRadius: BorderRadius.circular(16),
-                  borderWidth: 1.0,
-                  // [수정] 하이라이트 대폭 완화
-                  borderColor: isActive ? deptColor.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.1),
-                  padding: const EdgeInsets.all(16),
-                  child: Stack(
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text('WEEK ${item.week}', style: TextStyle(color: isActive ? deptColor : Colors.white54, fontWeight: FontWeight.bold, fontSize: 12)),
-                          const SizedBox(height: 6),
-                          Text(item.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white), maxLines: 2, overflow: TextOverflow.ellipsis),
-                          const SizedBox(height: 4),
-                          Text(item.description, style: const TextStyle(color: Colors.white38, fontSize: 12), maxLines: 1),
-                        ],
-                      ),
-                      if (isManager)
-                        Positioned(
-                          top: 0, right: 0,
-                          child: InkWell(
-                            onTap: () async {
-                              final confirm = await showDialog<bool>(
-                                context: context,
-                                builder: (ctx) => AlertDialog(
-                                  backgroundColor: Colors.grey[900],
-                                  title: const Text("삭제하시겠습니까?", style: TextStyle(color: Colors.white)),
-                                  actions: [
-                                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("취소")),
-                                    TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("삭제", style: TextStyle(color: Colors.red))),
-                                  ],
-                                ),
-                              );
-                              if (confirm == true) {
-                                await SupabaseRepository().deleteCurriculum(item.id);
-                                // [핵심] 삭제 후 강제 새로고침
-                                ref.refresh(curriculumProvider);
-                              }
-                            },
-                            child: const Icon(Icons.close, color: Colors.redAccent, size: 18),
-                          ),
-                        ),
-                    ],
+              padding: const EdgeInsets.only(top: 60, bottom: 10),
+              child: TableCalendar(
+                firstDay: DateTime.utc(2020, 1, 1),
+                lastDay: DateTime.utc(2030, 12, 31),
+                focusedDay: _focusedDay,
+                calendarFormat: CalendarFormat.month,
+                selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+                onDaySelected: (selectedDay, focusedDay) {
+                  setState(() {
+                    _selectedDay = selectedDay;
+                    _focusedDay = focusedDay;
+                  });
+                },
+                eventLoader: (day) => _getEventsForDay(day, allEvents),
+
+                // 스타일링
+                headerStyle: const HeaderStyle(
+                  titleCentered: true,
+                  formatButtonVisible: false,
+                  titleTextStyle: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  leftChevronIcon: Icon(Icons.chevron_left, color: Colors.white),
+                  rightChevronIcon: Icon(Icons.chevron_right, color: Colors.white),
+                ),
+                calendarStyle: CalendarStyle(
+                  defaultTextStyle: const TextStyle(color: Colors.white),
+                  weekendTextStyle: const TextStyle(color: Colors.white54),
+                  outsideTextStyle: const TextStyle(color: Colors.white24),
+                  selectedDecoration: BoxDecoration(
+                    color: dept.color,
+                    shape: BoxShape.circle,
+                    boxShadow: [BoxShadow(color: dept.color.withValues(alpha: 0.5), blurRadius: 10)],
                   ),
+                  todayDecoration: const BoxDecoration(color: Colors.white24, shape: BoxShape.circle),
+                ),
+                // 마커 스타일
+                calendarBuilders: CalendarBuilders(
+                  markerBuilder: (context, date, events) {
+                    if (events.isEmpty) return null;
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: events.map((e) {
+                        final event = e as CalendarEvent;
+                        return Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                          width: 6, height: 6,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: event.isOfficial ? Colors.cyanAccent : Colors.purpleAccent,
+                          ),
+                        );
+                      }).toList(),
+                    );
+                  },
                 ),
               ),
             ),
           ),
+
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+              child: Text(
+                DateFormat('MMMM d, EEEE').format(_selectedDay ?? DateTime.now()),
+                style: GoogleFonts.chakraPetch(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+
+          if (selectedEvents.isEmpty)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.all(40.0),
+                child: Center(child: Text("No events", style: TextStyle(color: Colors.grey))),
+              ),
+            )
+          else
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                  final event = selectedEvents[index];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                    child: Dismissible(
+                      key: ValueKey(event.id),
+                      direction: DismissDirection.endToStart,
+                      background: Container(
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.only(right: 20),
+                        color: Colors.red.withValues(alpha: 0.8),
+                        child: const Icon(Icons.delete, color: Colors.white),
+                      ),
+                      confirmDismiss: (dir) async {
+                        if (!isManager && event.isOfficial) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("공식 일정은 삭제할 수 없습니다.")));
+                          return false;
+                        }
+                        return true;
+                      },
+                      onDismissed: (dir) async {
+                        if (event.isOfficial) {
+                          await SupabaseRepository().deleteCurriculum(event.id);
+                        } else {
+                          await SupabaseRepository().deletePersonalSchedule(event.id);
+                        }
+                        // Provider가 Stream이므로 자동 갱신됨 (별도 refresh 불필요)
+                      },
+                      child: GlassContainer.clearGlass(
+                        height: 80, width: double.infinity, borderRadius: BorderRadius.circular(16),
+                        borderWidth: 1.0,
+                        borderColor: event.isOfficial
+                            ? Colors.cyanAccent.withValues(alpha: 0.5)
+                            : Colors.purpleAccent.withValues(alpha: 0.5),
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 4, height: 40,
+                              decoration: BoxDecoration(
+                                color: event.isOfficial ? Colors.cyanAccent : Colors.purpleAccent,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(event.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                                  const SizedBox(height: 4),
+                                  Text(event.description, style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12), maxLines: 1),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+                childCount: selectedEvents.length,
+              ),
+            ),
+          const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
       ),
     );
