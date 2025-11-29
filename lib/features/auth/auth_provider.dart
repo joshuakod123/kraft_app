@@ -12,11 +12,13 @@ class AuthNotifier extends Notifier<AuthStatus> {
 
   @override
   AuthStatus build() {
+    // 앱 시작 시 무조건 초기화 로직 실행
     Future.microtask(() => _initialize());
-    return AuthStatus.initial;
+    return AuthStatus.initial; // 초기 상태는 무조건 Loading
   }
 
   Future<void> _initialize() async {
+    // 2.5초 대기와 세션 체크를 병렬로 실행하되, 둘 다 끝날 때까지 대기
     await Future.wait([
       Future.delayed(const Duration(milliseconds: 2500)),
       _checkSession(),
@@ -28,9 +30,11 @@ class AuthNotifier extends Notifier<AuthStatus> {
       final session = Supabase.instance.client.auth.currentSession;
       if (session != null) {
         final profile = await _repo.getUserProfile();
+        // 정보가 없으면 온보딩
         if (profile == null || profile['name'] == null || profile['team_id'] == null) {
           state = AuthStatus.onboardingRequired;
         } else {
+          // 정보가 있으면 홈으로
           _setGlobalState(profile);
           state = AuthStatus.authenticated;
         }
@@ -49,6 +53,7 @@ class AuthNotifier extends Notifier<AuthStatus> {
       orElse: () => Department.business,
     );
 
+    // 전역 상태 설정
     ref.read(currentDeptProvider.notifier).setDept(dept);
     ref.read(isManagerProvider.notifier).setManager(profile['role'] == 'manager');
   }
@@ -66,7 +71,6 @@ class AuthNotifier extends Notifier<AuthStatus> {
 
   Future<void> completeOnboarding({
     required String name,
-    // studentId 제거됨
     required String major,
     required String phone,
     required Department dept,
