@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/constants/department_enum.dart';
 import '../../core/state/global_providers.dart';
 import '../../core/data/supabase_repository.dart';
-import 'widgets/dept_notice_card.dart'; // noticeStreamProvider import
+import 'widgets/dept_notice_card.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -23,8 +22,28 @@ class HomeScreen extends ConsumerWidget {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: '제목', labelStyle: TextStyle(color: Colors.grey)), style: const TextStyle(color: Colors.white)),
-            TextField(controller: contentCtrl, decoration: const InputDecoration(labelText: '내용', labelStyle: TextStyle(color: Colors.grey)), style: const TextStyle(color: Colors.white), maxLines: 3),
+            TextField(
+              controller: titleCtrl,
+              decoration: const InputDecoration(
+                labelText: '제목',
+                labelStyle: TextStyle(color: Colors.grey),
+                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
+                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white)),
+              ),
+              style: const TextStyle(color: Colors.white),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: contentCtrl,
+              decoration: const InputDecoration(
+                labelText: '내용',
+                labelStyle: TextStyle(color: Colors.grey),
+                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
+                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white)),
+              ),
+              style: const TextStyle(color: Colors.white),
+              maxLines: 3,
+            ),
           ],
         ),
         actions: [
@@ -32,14 +51,16 @@ class HomeScreen extends ConsumerWidget {
           ElevatedButton(
             onPressed: () async {
               if (titleCtrl.text.isNotEmpty) {
+                // [수정] 인자 3개 전달 (제목, 내용, 팀ID)
                 await SupabaseRepository().addNotice(titleCtrl.text, contentCtrl.text, teamId);
                 if (context.mounted) {
                   Navigator.pop(context);
-                  // [핵심] 등록 후 즉시 새로고침
-                  ref.refresh(noticeStreamProvider(teamId));
+                  // [수정] refresh -> invalidate (Provider 초기화)
+                  ref.invalidate(noticeStreamProvider(teamId));
                 }
               }
             },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black),
             child: const Text("등록"),
           )
         ],
@@ -83,10 +104,19 @@ class HomeScreen extends ConsumerWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text('NOTICE', style: TextStyle(color: dept.color, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+
+                      // [수정] 매니저일 때 '이쁜 버튼' 표시
                       if (isManager)
-                        IconButton(
-                          icon: Icon(Icons.add_circle, color: dept.color),
+                        FilledButton.tonalIcon(
                           onPressed: () => _showAddNoticeDialog(context, ref, dept.id),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: dept.color.withValues(alpha: 0.2),
+                            foregroundColor: dept.color,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            minimumSize: const Size(0, 36),
+                          ),
+                          icon: const Icon(Icons.edit, size: 16),
+                          label: Text("POST", style: GoogleFonts.chakraPetch(fontWeight: FontWeight.bold)),
                         ),
                     ],
                   ),
@@ -97,7 +127,8 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
 
-          const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          // [핵심 수정] 하단 네비게이션 바에 가려지지 않도록 패딩 추가
+          const SliverPadding(padding: EdgeInsets.only(bottom: 120)),
         ],
       ),
     );

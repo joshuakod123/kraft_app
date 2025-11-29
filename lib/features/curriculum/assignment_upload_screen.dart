@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:file_picker/file_picker.dart'; // 추가 필요
+// import 'package:file_picker/file_picker.dart'; // [삭제] 사용하지 않는다면 제거, 사용한다면 유지
 import '../../core/data/supabase_repository.dart';
-import 'curriculum_provider.dart';
+import 'curriculum_provider.dart'; // CalendarEvent가 여기 정의되어 있음
 
 class AssignmentUploadScreen extends ConsumerStatefulWidget {
-  final CurriculumItem item;
+  // [수정] CurriculumItem -> CalendarEvent
+  final CalendarEvent item;
 
   const AssignmentUploadScreen({super.key, required this.item});
 
@@ -20,6 +21,7 @@ class _AssignmentUploadScreenState extends ConsumerState<AssignmentUploadScreen>
   Future<void> _pickAndUpload() async {
     setState(() => _isUploading = true);
 
+    // [참고] CalendarEvent 객체의 id를 사용
     final success = await SupabaseRepository().uploadAssignment(widget.item.id);
 
     if (mounted) {
@@ -44,7 +46,9 @@ class _AssignmentUploadScreenState extends ConsumerState<AssignmentUploadScreen>
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text('WEEK ${widget.item.week} MISSION', style: GoogleFonts.chakraPetch(fontWeight: FontWeight.bold)),
+        // [참고] CalendarEvent에는 week 정보가 없으므로 로직 수정 필요.
+        // 일단 임시로 'WEEK MISSION'으로 표시하거나, CalendarEvent에 week 필드를 추가해야 함.
+        title: Text('MISSION UPLOAD', style: GoogleFonts.chakraPetch(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
       ),

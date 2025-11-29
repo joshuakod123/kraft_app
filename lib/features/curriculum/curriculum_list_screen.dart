@@ -7,7 +7,7 @@ import 'package:intl/intl.dart';
 import '../../core/constants/department_enum.dart';
 import '../../core/state/global_providers.dart';
 import '../../core/data/supabase_repository.dart';
-import 'curriculum_provider.dart'; // CalendarEvent, Provider 사용
+import 'curriculum_provider.dart';
 
 class CurriculumListScreen extends ConsumerStatefulWidget {
   const CurriculumListScreen({super.key});
@@ -43,53 +43,99 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
         builder: (context, setDialogState) {
           return AlertDialog(
             backgroundColor: const Color(0xFF1E1E1E),
-            title: const Text("Add Schedule", style: TextStyle(color: Colors.white)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (isManager)
-                  Row(
-                    children: [
-                      ChoiceChip(
-                        label: const Text("Personal"),
-                        selected: !isOfficial,
-                        onSelected: (v) => setDialogState(() => isOfficial = !v),
-                        selectedColor: Colors.purpleAccent.withValues(alpha: 0.3),
-                        labelStyle: TextStyle(color: !isOfficial ? Colors.white : Colors.grey),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Text("Add Schedule", style: GoogleFonts.chakraPetch(color: Colors.white, fontWeight: FontWeight.bold)),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (isManager)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: ChoiceChip(
+                              label: const Center(child: Text("Personal")),
+                              selected: !isOfficial,
+                              onSelected: (v) => setDialogState(() => isOfficial = !v),
+                              selectedColor: Colors.purpleAccent.withValues(alpha: 0.8),
+                              backgroundColor: Colors.black54,
+                              labelStyle: TextStyle(color: !isOfficial ? Colors.black : Colors.white60, fontWeight: FontWeight.bold),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide.none),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ChoiceChip(
+                              label: const Center(child: Text("Official")),
+                              selected: isOfficial,
+                              onSelected: (v) => setDialogState(() => isOfficial = v),
+                              selectedColor: Colors.cyanAccent.withValues(alpha: 0.8),
+                              backgroundColor: Colors.black54,
+                              labelStyle: TextStyle(color: isOfficial ? Colors.black : Colors.white60, fontWeight: FontWeight.bold),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide.none),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 10),
-                      ChoiceChip(
-                        label: const Text("Official"),
-                        selected: isOfficial,
-                        onSelected: (v) => setDialogState(() => isOfficial = v),
-                        selectedColor: Colors.cyanAccent.withValues(alpha: 0.3),
-                        labelStyle: TextStyle(color: isOfficial ? Colors.black : Colors.grey),
-                      ),
-                    ],
-                  ),
-                const SizedBox(height: 16),
-                TextField(controller: titleCtrl, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'Title', labelStyle: TextStyle(color: Colors.grey))),
-                TextField(controller: descCtrl, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'Description', labelStyle: TextStyle(color: Colors.grey))),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    const Icon(Icons.calendar_today, color: Colors.grey, size: 16),
-                    const SizedBox(width: 8),
-                    Text(DateFormat('yyyy-MM-dd').format(selectedDate), style: const TextStyle(color: Colors.white)),
-                    const Spacer(),
-                    TextButton(
-                      onPressed: () async {
-                        final picked = await showDatePicker(context: context, initialDate: selectedDate, firstDate: DateTime(2020), lastDate: DateTime(2030));
-                        if (picked != null) setDialogState(() => selectedDate = picked);
-                      },
-                      child: const Text("Change"),
-                    )
-                  ],
-                )
-              ],
+                    ),
+
+                  _buildFancyTextField(titleCtrl, 'Title'),
+                  const SizedBox(height: 12),
+                  _buildFancyTextField(descCtrl, 'Description', maxLines: 3),
+
+                  const SizedBox(height: 20),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.black26,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.calendar_today, color: Colors.grey, size: 18),
+                        const SizedBox(width: 10),
+                        Text(DateFormat('yyyy.MM.dd (E)').format(selectedDate), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: selectedDate,
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime(2030),
+                              builder: (context, child) {
+                                return Theme(
+                                  data: Theme.of(context).copyWith(
+                                    colorScheme: ColorScheme.dark(
+                                      primary: isOfficial ? Colors.cyanAccent : Colors.purpleAccent,
+                                      onPrimary: Colors.black,
+                                      surface: const Color(0xFF1E1E1E),
+                                      onSurface: Colors.white,
+                                    ),
+                                  ),
+                                  child: child!,
+                                );
+                              },
+                            );
+                            if (picked != null) setDialogState(() => selectedDate = picked);
+                          },
+                          child: Text("Change", style: TextStyle(color: isOfficial ? Colors.cyanAccent : Colors.purpleAccent)),
+                        )
+                      ],
+                    ),
+                  )
+                ],
+              ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
+              ),
               ElevatedButton(
                 onPressed: () async {
                   if (titleCtrl.text.isNotEmpty) {
@@ -98,10 +144,19 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                     } else {
                       await SupabaseRepository().addPersonalSchedule(titleCtrl.text, descCtrl.text, selectedDate);
                     }
-                    if (context.mounted) Navigator.pop(context);
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      // 리스트 갱신 (선택적)
+                      ref.invalidate(calendarEventsProvider);
+                    }
                   }
                 },
-                child: const Text("Add"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isOfficial ? Colors.cyanAccent : Colors.purpleAccent,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: const Text("Add", style: TextStyle(fontWeight: FontWeight.bold)),
               )
             ],
           );
@@ -110,21 +165,48 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
     );
   }
 
+  Widget _buildFancyTextField(TextEditingController controller, String label, {int maxLines = 1}) {
+    return TextField(
+      controller: controller,
+      style: const TextStyle(color: Colors.white),
+      maxLines: maxLines,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.grey),
+        filled: true,
+        fillColor: Colors.black54,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.white24),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // [핵심] 이제 여기서 깔끔하게 데이터만 받아옵니다.
     final allEvents = ref.watch(calendarEventsProvider);
-
     final dept = ref.watch(currentDeptProvider);
     final isManager = ref.watch(isManagerProvider);
     final selectedEvents = _getEventsForDay(_selectedDay ?? DateTime.now(), allEvents);
 
     return Scaffold(
       backgroundColor: Colors.black,
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: isManager ? Colors.cyanAccent : Colors.purpleAccent,
-        child: const Icon(Icons.add, color: Colors.black),
-        onPressed: () => _showAddEventDialog(isManager, dept.id),
+      // [수정] Floating Action Button 위치 조정
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 90.0), // 네비게이션 바 위로 올림
+        child: FloatingActionButton(
+          backgroundColor: isManager ? Colors.cyanAccent : Colors.purpleAccent,
+          shape: const CircleBorder(), // 완전한 원형
+          elevation: 10,
+          child: const Icon(Icons.add, color: Colors.black, size: 28),
+          onPressed: () => _showAddEventDialog(isManager, dept.id),
+        ),
       ),
       body: CustomScrollView(
         slivers: [
@@ -163,17 +245,18 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                     boxShadow: [BoxShadow(color: dept.color.withValues(alpha: 0.5), blurRadius: 10)],
                   ),
                   todayDecoration: const BoxDecoration(color: Colors.white24, shape: BoxShape.circle),
+                  markerDecoration: const BoxDecoration(color: Colors.grey, shape: BoxShape.circle), // 기본 마커
                 ),
-                // 마커 스타일
+                // 커스텀 마커
                 calendarBuilders: CalendarBuilders(
                   markerBuilder: (context, date, events) {
                     if (events.isEmpty) return null;
                     return Row(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: events.map((e) {
+                      children: events.take(3).map((e) { // 최대 3개까지만 표시
                         final event = e as CalendarEvent;
                         return Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                          margin: const EdgeInsets.symmetric(horizontal: 1.0),
                           width: 6, height: 6,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
@@ -218,7 +301,10 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                       background: Container(
                         alignment: Alignment.centerRight,
                         padding: const EdgeInsets.only(right: 20),
-                        color: Colors.red.withValues(alpha: 0.8),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.8),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
                         child: const Icon(Icons.delete, color: Colors.white),
                       ),
                       confirmDismiss: (dir) async {
@@ -234,22 +320,28 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                         } else {
                           await SupabaseRepository().deletePersonalSchedule(event.id);
                         }
-                        // Provider가 Stream이므로 자동 갱신됨 (별도 refresh 불필요)
+                        ref.invalidate(calendarEventsProvider);
                       },
                       child: GlassContainer.clearGlass(
                         height: 80, width: double.infinity, borderRadius: BorderRadius.circular(16),
                         borderWidth: 1.0,
                         borderColor: event.isOfficial
-                            ? Colors.cyanAccent.withValues(alpha: 0.5)
-                            : Colors.purpleAccent.withValues(alpha: 0.5),
+                            ? Colors.cyanAccent.withValues(alpha: 0.3)
+                            : Colors.purpleAccent.withValues(alpha: 0.3),
                         padding: const EdgeInsets.symmetric(horizontal: 20),
                         child: Row(
                           children: [
                             Container(
                               width: 4, height: 40,
                               decoration: BoxDecoration(
-                                color: event.isOfficial ? Colors.cyanAccent : Colors.purpleAccent,
-                                borderRadius: BorderRadius.circular(2),
+                                  color: event.isOfficial ? Colors.cyanAccent : Colors.purpleAccent,
+                                  borderRadius: BorderRadius.circular(2),
+                                  boxShadow: [
+                                    BoxShadow(
+                                        color: (event.isOfficial ? Colors.cyanAccent : Colors.purpleAccent).withValues(alpha: 0.5),
+                                        blurRadius: 8
+                                    )
+                                  ]
                               ),
                             ),
                             const SizedBox(width: 16),
@@ -273,7 +365,8 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                 childCount: selectedEvents.length,
               ),
             ),
-          const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          // [수정] 리스트 마지막 여백 추가 (FAB에 가려지지 않게)
+          const SliverToBoxAdapter(child: SizedBox(height: 120)),
         ],
       ),
     );

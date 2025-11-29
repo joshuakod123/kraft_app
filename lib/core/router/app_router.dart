@@ -8,13 +8,13 @@ import '../../features/auth/onboarding_screen.dart';
 import '../../features/home/home_screen.dart';
 import '../../features/curriculum/curriculum_list_screen.dart';
 import '../../features/curriculum/assignment_upload_screen.dart';
-import '../../features/curriculum/curriculum_provider.dart';
+import '../../features/curriculum/curriculum_provider.dart'; // [필수] CalendarEvent import
 import '../../features/streaming/stream_screen.dart';
 import '../../features/splash/splash_screen.dart';
 import '../../features/admin/qr_create_screen.dart';
 import '../../features/attendance/attendance_scan_screen.dart';
-import '../../features/archive/archive_screen.dart'; // [신규]
-import '../../features/profile/profile_screen.dart'; // [신규]
+import '../../features/archive/archive_screen.dart';
+import '../../features/profile/profile_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authStateListenable = ValueNotifier<AuthStatus>(AuthStatus.initial);
@@ -55,7 +55,6 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()),
 
-      // [Fade Effect] 로그인 화면
       GoRoute(
         path: '/login',
         pageBuilder: (context, state) => CustomTransitionPage(
@@ -72,40 +71,20 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/assignment_upload',
         builder: (context, state) {
-          final item = state.extra as CurriculumItem;
+          // [수정] CurriculumItem -> CalendarEvent
+          final item = state.extra as CalendarEvent;
           return AssignmentUploadScreen(item: item);
         },
       ),
 
-      // [메인 쉘 - 5개 탭]
       ShellRoute(
         builder: (context, state, child) => MainShell(child: child),
         routes: [
-          // 1. Home
-          GoRoute(
-            path: '/home',
-            pageBuilder: (context, state) => NoTransitionPage(child: const HomeScreen()),
-          ),
-          // 2. Upcoming (기존 Curriculum 화면)
-          GoRoute(
-            path: '/upcoming',
-            pageBuilder: (context, state) => NoTransitionPage(child: const CurriculumListScreen()),
-          ),
-          // 3. Archive (내가 올린 파일 목록)
-          GoRoute(
-            path: '/archive',
-            pageBuilder: (context, state) => NoTransitionPage(child: const ArchiveScreen()),
-          ),
-          // 4. Streaming
-          GoRoute(
-            path: '/stream',
-            pageBuilder: (context, state) => NoTransitionPage(child: const StreamScreen()),
-          ),
-          // 5. Profile
-          GoRoute(
-            path: '/profile',
-            pageBuilder: (context, state) => NoTransitionPage(child: const ProfileScreen()),
-          ),
+          GoRoute(path: '/home', pageBuilder: (context, state) => NoTransitionPage(child: const HomeScreen())),
+          GoRoute(path: '/upcoming', pageBuilder: (context, state) => NoTransitionPage(child: const CurriculumListScreen())),
+          GoRoute(path: '/archive', pageBuilder: (context, state) => NoTransitionPage(child: const ArchiveScreen())),
+          GoRoute(path: '/stream', pageBuilder: (context, state) => NoTransitionPage(child: const StreamScreen())),
+          GoRoute(path: '/profile', pageBuilder: (context, state) => NoTransitionPage(child: const ProfileScreen())),
         ],
       ),
     ],
