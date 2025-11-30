@@ -51,11 +51,9 @@ class HomeScreen extends ConsumerWidget {
           ElevatedButton(
             onPressed: () async {
               if (titleCtrl.text.isNotEmpty) {
-                // [수정] 인자 3개 전달 (제목, 내용, 팀ID)
                 await SupabaseRepository().addNotice(titleCtrl.text, contentCtrl.text, teamId);
                 if (context.mounted) {
                   Navigator.pop(context);
-                  // [수정] refresh -> invalidate (Provider 초기화)
                   ref.invalidate(noticeStreamProvider(teamId));
                 }
               }
@@ -89,6 +87,14 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
             actions: [
+              // [수정] 관리자(임원)일 경우 QR 생성 아이콘 표시
+              if (isManager)
+                IconButton(
+                  icon: const Icon(Icons.qr_code_2_rounded, size: 28),
+                  tooltip: '출석 QR 생성',
+                  onPressed: () => context.push('/qr_create'),
+                ),
+              // 일반 회원용 QR 스캔 아이콘
               IconButton(icon: const Icon(Icons.qr_code_scanner), onPressed: () => context.push('/attendance_scan')),
               const SizedBox(width: 8),
             ],
@@ -104,8 +110,6 @@ class HomeScreen extends ConsumerWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text('NOTICE', style: TextStyle(color: dept.color, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-
-                      // [수정] 매니저일 때 '이쁜 버튼' 표시
                       if (isManager)
                         FilledButton.tonalIcon(
                           onPressed: () => _showAddNoticeDialog(context, ref, dept.id),
@@ -127,7 +131,6 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
 
-          // [핵심 수정] 하단 네비게이션 바에 가려지지 않도록 패딩 추가
           const SliverPadding(padding: EdgeInsets.only(bottom: 120)),
         ],
       ),

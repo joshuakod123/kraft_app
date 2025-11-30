@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -33,6 +32,74 @@ class SupabaseRepository {
     } catch (e) { return false; }
   }
 
+  // --- [공식 일정] Curriculums (날짜 + 시간) ---
+  Stream<List<Map<String, dynamic>>> getCurriculumsStream(int teamId) {
+    return _client
+        .from('curriculums')
+        .stream(primaryKey: ['id'])
+        .eq('team_id', teamId)
+        .order('event_date', ascending: true);
+  }
+
+  // [수정] 종료 시간(endTime) 포함
+  Future<bool> addCurriculum(String title, String desc, DateTime date, DateTime? endTime, int teamId) async {
+    try {
+      await _client.from('curriculums').insert({
+        'title': title,
+        'description': desc,
+        'week_number': 0, // 필요시 계산 로직 추가
+        'team_id': teamId,
+        'event_date': date.toIso8601String(),
+        'end_time': endTime?.toIso8601String(),
+        'semester_id': 1, // 기본값
+      });
+      return true;
+    } catch (e) {
+      debugPrint("Add Official Error: $e");
+      return false;
+    }
+  }
+
+  Future<bool> deleteCurriculum(int id) async {
+    try { await _client.from('curriculums').delete().eq('id', id); return true; } catch (e) { return false; }
+  }
+
+  // --- [개인 일정] Personal Schedules (날짜 + 시간) ---
+  Stream<List<Map<String, dynamic>>> getPersonalSchedulesStream() {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return const Stream.empty();
+
+    return _client
+        .from('personal_schedules')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', userId)
+        .order('event_date', ascending: true);
+  }
+
+  // [수정] 종료 시간(endTime) 포함
+  Future<bool> addPersonalSchedule(String title, String desc, DateTime date, DateTime? endTime) async {
+    try {
+      final userId = _client.auth.currentUser?.id;
+      if (userId == null) return false;
+
+      await _client.from('personal_schedules').insert({
+        'user_id': userId,
+        'title': title,
+        'description': desc,
+        'event_date': date.toIso8601String(),
+        'end_time': endTime?.toIso8601String(),
+      });
+      return true;
+    } catch (e) {
+      debugPrint("Add Personal Error: $e");
+      return false;
+    }
+  }
+
+  Future<bool> deletePersonalSchedule(int id) async {
+    try { await _client.from('personal_schedules').delete().eq('id', id); return true; } catch (e) { return false; }
+  }
+
   // --- Notices ---
   Stream<List<Map<String, dynamic>>> getNoticesStream(int teamId) {
     return _client.from('notices').stream(primaryKey: ['id']).eq('team_id', teamId).order('created_at', ascending: false);
@@ -44,67 +111,36 @@ class SupabaseRepository {
     try { await _client.from('notices').delete().eq('id', id); return true; } catch (e) { return false; }
   }
 
-  // --- [수정] Curriculum (공식 일정) ---
-  Stream<List<Map<String, dynamic>>> getCurriculumsStream(int teamId) {
-    // [중요] .order() 제거 (스트림 에러 방지)
-    return _client
-        .from('curriculums')
-        .stream(primaryKey: ['id'])
-        .eq('team_id', teamId);
-  }
-
-  Future<bool> addCurriculum(String title, String desc, DateTime date, int teamId) async {
-    try {
-      await _client.from('curriculums').insert({
-        'title': title,
-        'description': desc,
-        'week_number': 0,
-        'team_id': teamId,
-        'event_date': date.toIso8601String(),
-      });
-      return true;
-    } catch (e) {
-      debugPrint("Add Official Error: $e");
-      return false;
-    }
-  }
-  Future<bool> deleteCurriculum(int id) async {
-    try { await _client.from('curriculums').delete().eq('id', id); return true; } catch (e) { return false; }
-  }
-
-  // --- [수정] Personal Schedules (개인 일정) ---
-  Stream<List<Map<String, dynamic>>> getPersonalSchedulesStream() {
+  // --- Archives (New) ---
+  Stream<List<Map<String, dynamic>>> getMyArchivesStream() {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return const Stream.empty();
 
-    // [중요] .order() 제거
     return _client
-        .from('personal_schedules')
+        .from('archives')
         .stream(primaryKey: ['id'])
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .order('created_at', ascending: false);
   }
 
-  Future<bool> addPersonalSchedule(String title, String desc, DateTime date) async {
+  Future<void> addArchive(String title, String description, String fileUrl) async {
     try {
       final userId = _client.auth.currentUser?.id;
-      if (userId == null) return false;
-      await _client.from('personal_schedules').insert({
+      if (userId == null) return;
+
+      await _client.from('archives').insert({
         'user_id': userId,
         'title': title,
-        'description': desc,
-        'event_date': date.toIso8601String(),
+        'description': description,
+        'file_url': fileUrl,
+        'file_type': 'image', // 기본값
       });
-      return true;
     } catch (e) {
-      debugPrint("Add Personal Error: $e");
-      return false;
+      debugPrint("Add Archive Error: $e");
     }
   }
-  Future<bool> deletePersonalSchedule(int id) async {
-    try { await _client.from('personal_schedules').delete().eq('id', id); return true; } catch (e) { return false; }
-  }
 
-  // --- Others ---
+  // --- Etc ---
   Future<List<Map<String, dynamic>>> getMyAssignments() async {
     try {
       final userId = _client.auth.currentUser?.id;
@@ -113,7 +149,13 @@ class SupabaseRepository {
       return List<Map<String, dynamic>>.from(response);
     } catch (e) { return []; }
   }
-  Future<bool> uploadAssignment(int curriculumId) async { return false; }
-  Future<bool> markAttendance(String qrData) async { return true; }
+
+  Future<bool> uploadAssignment(int curriculumId) async { return false; } // 추후 구현
+
+  Future<bool> markAttendance(String qrData) async {
+    // QR 데이터 파싱 및 출석 처리 로직 (생략)
+    return true;
+  }
+
   Future<List<Map<String, dynamic>>> getTracks(int teamId) async { return []; }
 }
