@@ -64,6 +64,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
       ),
 
+
       GoRoute(path: '/onboarding', builder: (context, state) => const OnboardingScreen()),
       GoRoute(path: '/qr_create', builder: (context, state) => const QrCreateScreen()),
       GoRoute(path: '/attendance_scan', builder: (context, state) => const AttendanceScanScreen()),

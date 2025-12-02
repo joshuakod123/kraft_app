@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'dart:ui'; // Glass effect
+import '../../core/state/global_providers.dart'; // [필수] 부서 색상을 위해 import
 
-class MainShell extends StatelessWidget {
+class MainShell extends ConsumerWidget {
   final Widget child;
 
   const MainShell({super.key, required this.child});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // 현재 활성화된 탭 인덱스 계산
     final String location = GoRouterState.of(context).uri.toString();
     int currentIndex = 0;
@@ -54,8 +56,8 @@ class MainShell extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       _NavBarIcon(icon: Icons.home_rounded, index: 0, currentIndex: currentIndex, path: '/home'),
-                      _NavBarIcon(icon: Icons.calendar_month_rounded, index: 1, currentIndex: currentIndex, path: '/upcoming'), // Upcoming (Curriculum)
-                      _NavBarIcon(icon: Icons.folder_open_rounded, index: 2, currentIndex: currentIndex, path: '/archive'), // Archive (My Files)
+                      _NavBarIcon(icon: Icons.calendar_month_rounded, index: 1, currentIndex: currentIndex, path: '/upcoming'),
+                      _NavBarIcon(icon: Icons.folder_open_rounded, index: 2, currentIndex: currentIndex, path: '/archive'),
                       _NavBarIcon(icon: Icons.play_circle_outline_rounded, index: 3, currentIndex: currentIndex, path: '/stream'),
                       _NavBarIcon(icon: Icons.person_outline_rounded, index: 4, currentIndex: currentIndex, path: '/profile'),
                     ],
@@ -70,7 +72,7 @@ class MainShell extends StatelessWidget {
   }
 }
 
-class _NavBarIcon extends StatelessWidget {
+class _NavBarIcon extends ConsumerWidget {
   final IconData icon;
   final int index;
   final int currentIndex;
@@ -84,9 +86,14 @@ class _NavBarIcon extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // [수정] 현재 부서 색상 가져오기
+    final dept = ref.watch(currentDeptProvider);
+    final themeColor = dept.color;
+
     final isSelected = index == currentIndex;
-    final color = isSelected ? Colors.cyanAccent : Colors.grey;
+    // [수정] 선택된 경우 부서 색상 사용
+    final color = isSelected ? themeColor : Colors.grey;
 
     return GestureDetector(
       onTap: () => context.go(path),
@@ -108,7 +115,8 @@ class _NavBarIcon extends StatelessWidget {
               height: 4,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: isSelected ? Colors.cyanAccent : Colors.transparent,
+                // [수정] 인디케이터 색상도 부서 색상으로
+                color: isSelected ? themeColor : Colors.transparent,
               ),
             ).animate(target: isSelected ? 1 : 0).scale(),
           ],

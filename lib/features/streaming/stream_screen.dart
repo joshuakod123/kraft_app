@@ -1,35 +1,40 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'mini_player.dart';
+import '../../core/state/global_providers.dart'; // [필수] 부서 색상 import
 
-class StreamScreen extends StatelessWidget {
+class StreamScreen extends ConsumerWidget {
   const StreamScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // [수정] 현재 부서 색상 가져오기
+    final dept = ref.watch(currentDeptProvider);
+    final themeColor = dept.color;
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // 배경 그라디언트
+          // [수정] 배경 그라디언트를 부서 색상으로 변경
           Container(
             decoration: BoxDecoration(
               gradient: RadialGradient(
                 center: const Alignment(0, -0.5),
                 radius: 1.0,
                 colors: [
-                  Colors.indigoAccent.withValues(alpha: 0.2),
+                  themeColor.withValues(alpha: 0.2), // 부서별 색상 적용
                   Colors.black,
                 ],
               ),
             ),
           ),
 
-          // [수정] SafeArea + Padding으로 UI를 아래로 내림
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.only(top: 60.0, left: 24, right: 24), // 상단 여백 추가
+              padding: const EdgeInsets.only(top: 60.0, left: 24, right: 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -59,7 +64,8 @@ class StreamScreen extends StatelessWidget {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
-                          BoxShadow(color: Colors.indigoAccent.withValues(alpha: 0.4), blurRadius: 40)
+                          // [수정] 그림자 색상도 부서 색상으로
+                          BoxShadow(color: themeColor.withValues(alpha: 0.4), blurRadius: 40)
                         ],
                         image: const DecorationImage(
                           image: AssetImage('assets/images/logo.png'),
@@ -73,7 +79,7 @@ class StreamScreen extends StatelessWidget {
 
                   // 미니 플레이어
                   const MiniPlayer(),
-                  const SizedBox(height: 100), // 하단 탭바 가리지 않게 여백
+                  const SizedBox(height: 100),
                 ],
               ),
             ),

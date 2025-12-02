@@ -30,8 +30,8 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
     return allEvents.where((event) => isSameDay(event.date, day)).toList();
   }
 
-  // [상세 보기 팝업]
-  void _showDetailDialog(CalendarEvent event) {
+  // [기능] 상세 보기 팝업 (삭제 기능 포함)
+  void _showDetailDialog(CalendarEvent event, bool isManager) {
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -41,6 +41,7 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
           width: double.infinity,
           borderRadius: BorderRadius.circular(20),
           borderWidth: 1.0,
+          // 테두리 색상: 공식이면 Cyan, 개인이면 Purple (구분을 위해 유지하되, 부서색 고려 가능)
           borderColor: event.isOfficial ? Colors.cyanAccent.withValues(alpha: 0.5) : Colors.purpleAccent.withValues(alpha: 0.5),
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -60,9 +61,43 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                       style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12),
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white70),
-                    onPressed: () => Navigator.pop(context),
+                  Row(
+                    children: [
+                      // [삭제 버튼] 개인 일정이거나, 매니저인 경우 표시
+                      if (!event.isOfficial || isManager)
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                          onPressed: () async {
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                backgroundColor: const Color(0xFF1E1E1E),
+                                title: const Text("Delete Schedule", style: TextStyle(color: Colors.white)),
+                                content: const Text("Are you sure?", style: TextStyle(color: Colors.grey)),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
+                                  TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Delete", style: TextStyle(color: Colors.red))),
+                                ],
+                              ),
+                            );
+
+                            if (confirm == true) {
+                              if (event.isOfficial) {
+                                await SupabaseRepository().deleteCurriculum(event.id);
+                              } else {
+                                await SupabaseRepository().deletePersonalSchedule(event.id);
+                              }
+                              // 목록 갱신
+                              ref.invalidate(calendarEventsProvider);
+                              if (mounted) Navigator.pop(context);
+                            }
+                          },
+                        ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white70),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
                   )
                 ],
               ),
@@ -97,8 +132,8 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
     );
   }
 
-  // [일정 추가 팝업 - 시간 설정 포함]
-  void _showAddEventDialog(bool isManager, int teamId) {
+  // [일정 추가 팝업]
+  void _showAddEventDialog(bool isManager, Department dept) {
     final titleCtrl = TextEditingController();
     final descCtrl = TextEditingController();
     bool isOfficial = false;
@@ -140,12 +175,11 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                     ]),
                     const SizedBox(height: 16),
                   ],
-                  _buildFancyTextField(titleCtrl, 'Title'),
+                  _buildFancyTextField(titleCtrl, 'Title', dept.color),
                   const SizedBox(height: 12),
-                  _buildFancyTextField(descCtrl, 'Description', maxLines: 3),
+                  _buildFancyTextField(descCtrl, 'Description', dept.color, maxLines: 3),
                   const SizedBox(height: 20),
 
-                  // 날짜 및 시간 선택 UI
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white10)),
@@ -188,7 +222,7 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                     final endDateTime = DateTime(date.year, date.month, date.day, endTime.hour, endTime.minute);
 
                     if (isOfficial) {
-                      await SupabaseRepository().addCurriculum(titleCtrl.text, descCtrl.text, startDateTime, endDateTime, teamId);
+                      await SupabaseRepository().addCurriculum(titleCtrl.text, descCtrl.text, startDateTime, endDateTime, dept.id);
                     } else {
                       await SupabaseRepository().addPersonalSchedule(titleCtrl.text, descCtrl.text, startDateTime, endDateTime);
                     }
@@ -199,7 +233,8 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                     }
                   }
                 },
-                style: ElevatedButton.styleFrom(backgroundColor: isOfficial ? Colors.cyanAccent : Colors.purpleAccent, foregroundColor: Colors.black),
+                // [수정] 다이얼로그 추가 버튼도 부서 색상으로
+                style: ElevatedButton.styleFrom(backgroundColor: dept.color, foregroundColor: Colors.black),
                 child: const Text("Add"),
               )
             ],
@@ -209,7 +244,7 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
     );
   }
 
-  Widget _buildFancyTextField(TextEditingController ctrl, String hint, {int maxLines = 1}) {
+  Widget _buildFancyTextField(TextEditingController ctrl, String hint, Color deptColor, {int maxLines = 1}) {
     return TextField(
       controller: ctrl,
       style: const TextStyle(color: Colors.white),
@@ -219,7 +254,9 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
         labelStyle: const TextStyle(color: Colors.grey),
         filled: true,
         fillColor: Colors.black54,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        // [수정] 포커스 시 부서 색상 테두리
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: deptColor)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
       ),
     );
   }
@@ -236,10 +273,11 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: 90.0),
         child: FloatingActionButton(
-          backgroundColor: isManager ? Colors.cyanAccent : Colors.purpleAccent,
+          // [수정] FAB 색상을 부서 고유 색상으로 변경
+          backgroundColor: dept.color,
           shape: const CircleBorder(),
           child: const Icon(Icons.add, color: Colors.black),
-          onPressed: () => _showAddEventDialog(isManager, dept.id),
+          onPressed: () => _showAddEventDialog(isManager, dept),
         ),
       ),
       body: CustomScrollView(
@@ -257,7 +295,14 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                 onDaySelected: (selectedDay, focusedDay) => setState(() { _selectedDay = selectedDay; _focusedDay = focusedDay; }),
                 eventLoader: (day) => _getEventsForDay(day, allEvents),
                 headerStyle: const HeaderStyle(titleCentered: true, formatButtonVisible: false, titleTextStyle: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold), leftChevronIcon: Icon(Icons.chevron_left, color: Colors.white), rightChevronIcon: Icon(Icons.chevron_right, color: Colors.white)),
-                calendarStyle: CalendarStyle(defaultTextStyle: const TextStyle(color: Colors.white), weekendTextStyle: const TextStyle(color: Colors.white54), outsideTextStyle: const TextStyle(color: Colors.white24), todayDecoration: const BoxDecoration(color: Colors.white24, shape: BoxShape.circle), selectedDecoration: BoxDecoration(color: dept.color, shape: BoxShape.circle)),
+                calendarStyle: CalendarStyle(
+                    defaultTextStyle: const TextStyle(color: Colors.white),
+                    weekendTextStyle: const TextStyle(color: Colors.white54),
+                    outsideTextStyle: const TextStyle(color: Colors.white24),
+                    todayDecoration: const BoxDecoration(color: Colors.white24, shape: BoxShape.circle),
+                    // [수정] 선택된 날짜 마커를 부서 색상으로
+                    selectedDecoration: BoxDecoration(color: dept.color, shape: BoxShape.circle)
+                ),
                 calendarBuilders: CalendarBuilders(
                   markerBuilder: (context, date, events) {
                     if (events.isEmpty) return null;
@@ -265,6 +310,7 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: events.take(3).map((e) {
                         final event = e as CalendarEvent;
+                        // 마커는 공식(Cyan) / 개인(Purple) 구분 유지 (이게 더 직관적일 수 있음)
                         return Container(
                           margin: const EdgeInsets.symmetric(horizontal: 1.0),
                           width: 6, height: 6,
@@ -293,7 +339,7 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
                   child: GestureDetector(
-                    onTap: () => _showDetailDialog(event),
+                    onTap: () => _showDetailDialog(event, isManager), // 상세 팝업
                     child: GlassContainer.clearGlass(
                       height: 80, width: double.infinity, borderRadius: BorderRadius.circular(16),
                       borderWidth: 1.0, borderColor: Colors.white10,
