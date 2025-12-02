@@ -2,15 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/data/supabase_repository.dart';
 
-// 인증 상태 열거형
-enum AuthStatus {
-  initial,
-  authenticated,
-  unauthenticated,
-  onboardingRequired,
-}
+enum AuthStatus { initial, authenticated, unauthenticated, onboardingRequired }
 
-// 인증 상태 관리 Provider
+// [수정] 가장 안정적인 StateNotifierProvider 문법
 final authProvider = StateNotifierProvider<AuthNotifier, AuthStatus>((ref) {
   return AuthNotifier();
 });
@@ -30,29 +24,18 @@ class AuthNotifier extends StateNotifier<AuthStatus> {
       await _checkOnboarding();
     }
 
-    // Auth 상태 변경 감지
     _supabase.auth.onAuthStateChange.listen((data) async {
-      final event = data.event;
-      if (event == AuthChangeEvent.signedIn) {
+      if (data.event == AuthChangeEvent.signedIn) {
         await _checkOnboarding();
-      } else if (event == AuthChangeEvent.signedOut) {
+      } else if (data.event == AuthChangeEvent.signedOut) {
         state = AuthStatus.unauthenticated;
       }
     });
   }
 
   Future<void> _checkOnboarding() async {
-    final user = _supabase.auth.currentUser;
-    if (user == null) {
-      state = AuthStatus.unauthenticated;
-      return;
-    }
-
-    // DB에서 유저 정보 확인
     final userData = await SupabaseRepository().getUserProfile();
-
-    // 이름이 없으면 온보딩 필요
-    if (userData == null || userData['name'] == null || userData['name'].isEmpty) {
+    if (userData == null || userData['name'] == null) {
       state = AuthStatus.onboardingRequired;
     } else {
       state = AuthStatus.authenticated;
@@ -65,19 +48,16 @@ class AuthNotifier extends StateNotifier<AuthStatus> {
   }
 }
 
-// [핵심] ProfileScreen에서 사용하는 유저 데이터 Provider
+// [핵심] ProfileScreen에서 쓰이는 Provider
 final userDataProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
-  // 인증 상태가 변경될 때마다 다시 로드
-  ref.watch(authProvider);
+  ref.watch(authProvider); // Auth 상태 변경 감지
   return SupabaseRepository().getUserProfile();
 });
 
-// 관리자 여부 확인 Provider
 final isManagerProvider = Provider<bool>((ref) {
   final userAsync = ref.watch(userDataProvider);
-  return userAsync.when(
+  return userAsync.maybeWhen(
     data: (user) => user?['role'] == 'manager' || user?['role'] == 'executive',
-    loading: () => false,
-    error: (_, __) => false,
+    orElse: () => false,
   );
 });

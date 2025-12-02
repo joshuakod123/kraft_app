@@ -26,14 +26,14 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(success ? "✅ 출석 완료!" : "❌ 출석 실패 (이미 완료했거나 오류)"),
+              content: Text(success ? "✅ 출석 완료!" : "❌ 출석 실패"),
               backgroundColor: success ? Colors.green : Colors.red,
             ),
           );
-          if (success) Navigator.pop(context); // 성공 시 화면 닫기
-          else setState(() => _isProcessing = false); // 실패 시 다시 스캔 가능하게
+          if (success) Navigator.pop(context);
+          else setState(() => _isProcessing = false);
         }
-        break; // 하나만 인식하고 종료
+        break;
       }
     }
   }
@@ -41,10 +41,8 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Scan QR Code"), backgroundColor: Colors.black, foregroundColor: Colors.white),
-      body: MobileScanner(
-        onDetect: _onDetect,
-      ),
+      appBar: AppBar(title: const Text("Scan QR"), backgroundColor: Colors.black),
+      body: MobileScanner(onDetect: _onDetect),
     );
   }
 }
