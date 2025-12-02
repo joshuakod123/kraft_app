@@ -30,8 +30,11 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
               backgroundColor: success ? Colors.green : Colors.red,
             ),
           );
-          if (success) Navigator.pop(context);
-          else setState(() => _isProcessing = false);
+          if (success) {
+            Navigator.pop(context);
+          } else {
+            setState(() => _isProcessing = false);
+          }
         }
         break;
       }

@@ -53,14 +53,22 @@ class SupabaseRepository {
     } catch (e) { return null; }
   }
 
-  // --- Attendance ---
+  // --- Attendance (.count() 문법 수정) ---
   Future<Map<String, int>> getAttendanceStats() async {
     try {
       final userId = _client.auth.currentUser?.id;
       if (userId == null) return {'attended': 0, 'total': 16};
-      final count = await _client.from('attendance').count(CountOption.exact).eq('user_id', userId);
+
+      // [수정] v2.8+ 에서는 .count()가 int를 바로 반환합니다.
+      final count = await _client
+          .from('attendance')
+          .count(CountOption.exact)
+          .eq('user_id', userId);
+
       return {'attended': count, 'total': 16};
-    } catch (e) { return {'attended': 0, 'total': 16}; }
+    } catch (e) {
+      return {'attended': 0, 'total': 16};
+    }
   }
 
   Future<bool> markAttendance(String sessionId) async {
@@ -74,7 +82,7 @@ class SupabaseRepository {
     } catch (e) { return false; }
   }
 
-  // --- Streaming (Likes Only) ---
+  // --- Streaming (Community) ---
   Future<bool> toggleSongLike(int songId) async {
     try {
       final userId = _client.auth.currentUser!.id;
@@ -93,6 +101,7 @@ class SupabaseRepository {
     return Stream.fromFuture(Future(() async {
       try {
         final userId = _client.auth.currentUser?.id;
+        // [수정] .count() 문법 적용
         final count = await _client.from('song_likes').count(CountOption.exact).eq('song_id', songId);
         bool isLiked = false;
         if (userId != null) {
@@ -104,14 +113,14 @@ class SupabaseRepository {
     }));
   }
 
-  // --- [New] Community (게시판) ---
+  // --- Community (게시판) ---
   Future<void> addCommunityPost(String content, String category) async {
     try {
       final userId = _client.auth.currentUser!.id;
       await _client.from('community_posts').insert({
         'user_id': userId,
         'content': content,
-        'category': category, // 'FREE', 'REVIEW' 등
+        'category': category,
       });
     } catch (e) { debugPrint("Post Error: $e"); }
   }

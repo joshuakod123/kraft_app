@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 
-// [모델] 이 Song 클래스가 'StreamScreen'에서 쓰입니다.
+// [중요] Song 클래스 정의
 class Song {
   final int id;
   final String title;
@@ -18,14 +18,12 @@ class Song {
   });
 }
 
-// 오디오 플레이어 Provider
 final audioPlayerProvider = Provider<AudioPlayer>((ref) {
   final player = AudioPlayer();
-  ref.onDispose(() => player.dispose());
+  ref.onDispose(player.dispose);
   return player;
 });
 
-// [수정] 가장 간단하고 확실한 StateProvider 사용
 final currentSongProvider = StateProvider<Song?>((ref) => null);
 
 final playerStateProvider = StreamProvider<PlayerState>((ref) {
@@ -52,14 +50,12 @@ class AudioService {
   AudioPlayer get _player => _ref.read(audioPlayerProvider);
 
   Future<void> playSong(Song song) async {
-    // StateProvider 값 업데이트
     _ref.read(currentSongProvider.notifier).state = song;
-
     try {
       await _player.setUrl(song.audioUrl);
       _player.play();
     } catch (e) {
-      print("Audio Play Error: $e");
+      print("Audio Error: $e");
     }
   }
 

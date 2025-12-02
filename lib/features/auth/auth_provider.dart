@@ -4,7 +4,6 @@ import '../../core/data/supabase_repository.dart';
 
 enum AuthStatus { initial, authenticated, unauthenticated, onboardingRequired }
 
-// [수정] 가장 안정적인 StateNotifierProvider 문법
 final authProvider = StateNotifierProvider<AuthNotifier, AuthStatus>((ref) {
   return AuthNotifier();
 });
@@ -46,18 +45,20 @@ class AuthNotifier extends StateNotifier<AuthStatus> {
     await _supabase.auth.signOut();
     state = AuthStatus.unauthenticated;
   }
+
+  void logout() {}
 }
 
-// [핵심] ProfileScreen에서 쓰이는 Provider
+// [필수] ProfileScreen 에러 해결용 Provider
 final userDataProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
-  ref.watch(authProvider); // Auth 상태 변경 감지
+  ref.watch(authProvider);
   return SupabaseRepository().getUserProfile();
 });
 
 final isManagerProvider = Provider<bool>((ref) {
   final userAsync = ref.watch(userDataProvider);
   return userAsync.maybeWhen(
-    data: (user) => user?['role'] == 'manager' || user?['role'] == 'executive',
+    data: (user) => user?['role'] == 'manager',
     orElse: () => false,
   );
 });

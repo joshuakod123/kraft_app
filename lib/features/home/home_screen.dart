@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/constants/department_enum.dart';
 import '../../core/state/global_providers.dart';
-import '../community/community_screen.dart'; // [필수] 위에서 만든 파일 import
+import '../community/community_screen.dart'; // 아래 5번 파일 생성 필수
 import 'widgets/dept_notice_card.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -29,14 +29,13 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
           ),
-
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // [신규 기능] 커뮤니티 이동 버튼
+                  // [Community 이동 버튼]
                   GestureDetector(
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const CommunityScreen())),
                     child: Container(
@@ -55,7 +54,7 @@ class HomeScreen extends ConsumerWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text("COMMUNITY HUB", style: GoogleFonts.chakraPetch(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-                              const Text("Discuss homework & Share songs", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                              const Text("Discuss & Share", style: TextStyle(color: Colors.grey, fontSize: 12)),
                             ],
                           ),
                           const Spacer(),
@@ -64,7 +63,6 @@ class HomeScreen extends ConsumerWidget {
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 24),
                   Text('NOTICE', style: TextStyle(color: dept.color, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
                   const SizedBox(height: 10),

@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:glass_kit/glass_kit.dart';
-import '../../core/constants/department_enum.dart';
 import '../../core/data/supabase_repository.dart';
 import '../../core/state/global_providers.dart';
-import '../auth/auth_provider.dart'; // [필수] userDataProvider 사용
+import '../auth/auth_provider.dart'; // [필수] userDataProvider
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -55,7 +54,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               _field(nameCtrl, "Name"),
               _field(schoolCtrl, "School"),
               _field(majorCtrl, "Major"),
-              // [기능] 학번 입력 시 '학번' Suffix 표시
+              // [핵심] 학번 입력 필드 (Suffix 추가)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10.0),
                 child: TextField(
@@ -63,7 +62,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   style: const TextStyle(color: Colors.white),
                   decoration: const InputDecoration(
                       labelText: "Student ID",
-                      suffixText: "학번",
+                      suffixText: "학번", // 뒤에 '학번' 글자 고정
                       suffixStyle: TextStyle(color: Colors.white54),
                       filled: true, fillColor: Colors.black54
                   ),
@@ -178,7 +177,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         ),
                       ),
                       const SizedBox(height: 30),
-                      // [요청 반영] 개인정보 숨김 및 학번 뒤 '학번' 표시
+                      // [요청 반영] 원하는 정보만 표시
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(16)),
@@ -187,7 +186,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           _divider(),
                           _row("Major", user['major']),
                           _divider(),
-                          // 학번 뒤에 글자 붙이기
+                          // 학번 표시 (숫자 + '학번')
                           _row("Student ID", user['student_id'] != null ? "${user['student_id']}학번" : null),
                           _divider(),
                           _row("Age", user['age']?.toString()),
