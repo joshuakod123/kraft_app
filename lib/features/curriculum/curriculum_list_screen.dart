@@ -153,8 +153,11 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
             );
             if (picked != null) {
               setDialogState(() {
-                if (isStart) startTime = picked;
-                else endTime = picked;
+                if (isStart) {
+                  startTime = picked;
+                } else {
+                  endTime = picked;
+                }
               });
             }
           }

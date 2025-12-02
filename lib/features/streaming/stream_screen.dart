@@ -133,6 +133,7 @@ class StreamScreen extends ConsumerWidget {
                 padding: const EdgeInsets.all(24.0),
                 child: Column(
                   children: [
+                    // 곡 정보 및 좋아요 버튼
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -143,6 +144,7 @@ class StreamScreen extends ConsumerWidget {
                             Text(currentSong?.artist ?? 'Artist', style: const TextStyle(color: Colors.white54, fontSize: 16)),
                           ],
                         ),
+                        // [기능] 좋아요 버튼
                         StreamBuilder<Map<String, dynamic>>(
                           stream: SupabaseRepository().getSongLikeStatus(songId),
                           builder: (context, snapshot) {
@@ -162,6 +164,8 @@ class StreamScreen extends ConsumerWidget {
                       ],
                     ),
                     const SizedBox(height: 30),
+
+                    // 재생 바
                     Slider(
                       activeColor: themeColor, inactiveColor: Colors.white12,
                       min: 0.0, max: duration?.inMilliseconds.toDouble() ?? 1.0,
@@ -169,9 +173,12 @@ class StreamScreen extends ConsumerWidget {
                       onChanged: (v) => audioService.seek(Duration(milliseconds: v.toInt())),
                     ),
                     const SizedBox(height: 20),
+
+                    // 컨트롤러 및 댓글 버튼
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
+                        // [기능] 댓글 버튼
                         IconButton(icon: const Icon(Icons.chat_bubble_outline, color: Colors.white), onPressed: () => _showComments(context, songId, themeColor)),
                         IconButton(onPressed: audioService.playPrevious, icon: const Icon(Icons.skip_previous, color: Colors.white, size: 32)),
                         FloatingActionButton(backgroundColor: themeColor, child: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.black), onPressed: () => isPlaying ? audioService.pause() : audioService.play()),

@@ -15,8 +15,9 @@ class MainShell extends ConsumerWidget {
     // 현재 활성화된 탭 인덱스 계산
     final String location = GoRouterState.of(context).uri.toString();
     int currentIndex = 0;
-    if (location.startsWith('/home')) currentIndex = 0;
-    else if (location.startsWith('/upcoming')) currentIndex = 1;
+    if (location.startsWith('/home')) {
+      currentIndex = 0;
+    } else if (location.startsWith('/upcoming')) currentIndex = 1;
     else if (location.startsWith('/archive')) currentIndex = 2;
     else if (location.startsWith('/stream')) currentIndex = 3;
     else if (location.startsWith('/profile')) currentIndex = 4;

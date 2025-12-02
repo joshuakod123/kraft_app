@@ -5,7 +5,9 @@ class SupabaseRepository {
   final SupabaseClient _client = Supabase.instance.client;
   User? get currentUser => _client.auth.currentUser;
 
-  // --- Auth ---
+  // ------------------------------------------------------------------------
+  // [Auth & Profile]
+  // ------------------------------------------------------------------------
   Future<String?> signIn({required String email, required String password}) async {
     try { await _client.auth.signInWithPassword(email: email, password: password); return null; } catch (e) { return e.toString(); }
   }
@@ -14,7 +16,6 @@ class SupabaseRepository {
     try { await _client.auth.signUp(email: email, password: password); return null; } catch (e) { return e.toString(); }
   }
 
-  // --- Profile ---
   Future<bool> updateUserProfile({
     required String name,
     required String major,
@@ -44,7 +45,7 @@ class SupabaseRepository {
       });
       return true;
     } catch (e) {
-      debugPrint("Profile Update Error: $e");
+      debugPrint("Update Profile Error: $e");
       return false;
     }
   }
@@ -57,12 +58,15 @@ class SupabaseRepository {
     } catch (e) { return null; }
   }
 
-  // --- Attendance (테이블 없어도 0 리턴하도록 처리) ---
+  // ------------------------------------------------------------------------
+  // [Attendance]
+  // ------------------------------------------------------------------------
   Future<Map<String, int>> getAttendanceStats() async {
     try {
       final userId = _client.auth.currentUser?.id;
       if (userId == null) return {'attended': 0, 'total': 16};
 
+      // attendance 테이블이 존재한다고 가정
       final response = await _client
           .from('attendance')
           .select('*', CountOption.exact)
@@ -71,12 +75,33 @@ class SupabaseRepository {
       final count = response.count;
       return {'attended': count, 'total': 16};
     } catch (e) {
-      debugPrint("Attendance Error (Check DB Table): $e");
       return {'attended': 0, 'total': 16};
     }
   }
 
-  // --- Streaming Community ---
+  Future<bool> markAttendance(String sessionId) async {
+    try {
+      final userId = _client.auth.currentUser?.id;
+      if (userId == null) return false;
+
+      // 이미 출석했는지 확인
+      final check = await _client.from('attendance').select().eq('user_id', userId).eq('session_id', sessionId).maybeSingle();
+      if (check != null) return true; // 이미 출석함
+
+      await _client.from('attendance').insert({
+        'user_id': userId,
+        'session_id': sessionId,
+      });
+      return true;
+    } catch (e) {
+      debugPrint("Mark Attendance Error: $e");
+      return false;
+    }
+  }
+
+  // ------------------------------------------------------------------------
+  // [Streaming Community]
+  // ------------------------------------------------------------------------
   Future<bool> toggleSongLike(int songId) async {
     try {
       final userId = _client.auth.currentUser!.id;
@@ -92,20 +117,17 @@ class SupabaseRepository {
     } catch (e) { return false; }
   }
 
-  // 실시간 좋아요 상태 확인
   Stream<Map<String, dynamic>> getSongLikeStatus(int songId) {
     return Stream.fromFuture(Future(() async {
       try {
         final userId = _client.auth.currentUser?.id;
         final countRes = await _client.from('song_likes').select('*', CountOption.exact).eq('song_id', songId);
-        final count = countRes.count;
-
         bool isLiked = false;
         if (userId != null) {
           final myLike = await _client.from('song_likes').select().eq('user_id', userId).eq('song_id', songId).maybeSingle();
           isLiked = myLike != null;
         }
-        return {'count': count, 'isLiked': isLiked};
+        return {'count': countRes.count, 'isLiked': isLiked};
       } catch (e) {
         return {'count': 0, 'isLiked': false};
       }
@@ -116,7 +138,7 @@ class SupabaseRepository {
     try {
       final userId = _client.auth.currentUser!.id;
       await _client.from('song_comments').insert({'user_id': userId, 'song_id': songId, 'content': content});
-    } catch (e) { debugPrint("Comment Error: $e"); }
+    } catch (e) {}
   }
 
   Stream<List<Map<String, dynamic>>> getSongComments(int songId) {
@@ -130,10 +152,13 @@ class SupabaseRepository {
     });
   }
 
-  // --- Curriculums & Archive (기존 코드 유지) ---
+  // ------------------------------------------------------------------------
+  // [Curriculum & Schedule]
+  // ------------------------------------------------------------------------
   Stream<List<Map<String, dynamic>>> getCurriculumsStream(int teamId) {
     return _client.from('curriculums').stream(primaryKey: ['id']).eq('team_id', teamId).order('event_date', ascending: true);
   }
+
   Future<bool> addCurriculum(String title, String desc, DateTime date, DateTime? endTime, int teamId) async {
     try {
       await _client.from('curriculums').insert({
@@ -143,14 +168,17 @@ class SupabaseRepository {
       return true;
     } catch (e) { return false; }
   }
+
   Future<bool> deleteCurriculum(int id) async {
     try { await _client.from('curriculums').delete().eq('id', id); return true; } catch (e) { return false; }
   }
+
   Stream<List<Map<String, dynamic>>> getPersonalSchedulesStream() {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return const Stream.empty();
     return _client.from('personal_schedules').stream(primaryKey: ['id']).eq('user_id', userId).order('event_date', ascending: true);
   }
+
   Future<bool> addPersonalSchedule(String title, String desc, DateTime date, DateTime? endTime) async {
     try {
       final userId = _client.auth.currentUser?.id;
@@ -162,23 +190,31 @@ class SupabaseRepository {
       return true;
     } catch (e) { return false; }
   }
+
   Future<bool> deletePersonalSchedule(int id) async {
     try { await _client.from('personal_schedules').delete().eq('id', id); return true; } catch (e) { return false; }
   }
+
+  // ------------------------------------------------------------------------
+  // [Notices & Archives]
+  // ------------------------------------------------------------------------
   Stream<List<Map<String, dynamic>>> getNoticesStream(int teamId) {
     return _client.from('notices').stream(primaryKey: ['id']).eq('team_id', teamId).order('created_at', ascending: false);
   }
+
   Future<bool> addNotice(String title, String content, int teamId) async {
     try { await _client.from('notices').insert({'title': title, 'content': content, 'team_id': teamId}); return true; } catch (e) { return false; }
   }
   Future<bool> deleteNotice(int id) async {
     try { await _client.from('notices').delete().eq('id', id); return true; } catch (e) { return false; }
   }
+
   Stream<List<Map<String, dynamic>>> getMyArchivesStream() {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return const Stream.empty();
     return _client.from('archives').stream(primaryKey: ['id']).eq('user_id', userId).order('created_at', ascending: false);
   }
+
   Future<void> addArchive(String title, String description, String fileUrl) async {
     try {
       final userId = _client.auth.currentUser?.id;
@@ -186,6 +222,6 @@ class SupabaseRepository {
       await _client.from('archives').insert({'user_id': userId, 'title': title, 'description': description, 'file_url': fileUrl});
     } catch (e) {}
   }
+
   Future<bool> uploadAssignment(int curriculumId) async { return false; }
-  Future<bool> markAttendance(String userId, String sessionId) async { return true; }
 }

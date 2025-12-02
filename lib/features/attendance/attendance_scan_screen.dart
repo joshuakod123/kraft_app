@@ -10,7 +10,6 @@ class AttendanceScanScreen extends StatefulWidget {
 }
 
 class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
-  final SupabaseRepository _repo = SupabaseRepository();
   bool _isProcessing = false;
 
   void _onDetect(BarcodeCapture capture) async {
@@ -20,23 +19,21 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
     for (final barcode in barcodes) {
       if (barcode.rawValue != null) {
         setState(() => _isProcessing = true);
+        final sessionId = barcode.rawValue!;
 
-        final success = await _repo.markAttendance(barcode.rawValue!);
+        final success = await SupabaseRepository().markAttendance(sessionId);
 
         if (mounted) {
-          if (success) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('✅ 출석 체크 완료!'), backgroundColor: Colors.green),
-            );
-            Navigator.pop(context); // 홈으로 복귀
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('❌ 유효하지 않은 QR 코드입니다.'), backgroundColor: Colors.red),
-            );
-            setState(() => _isProcessing = false); // 재시도 가능하게
-          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(success ? "✅ 출석 완료!" : "❌ 출석 실패 (이미 완료했거나 오류)"),
+              backgroundColor: success ? Colors.green : Colors.red,
+            ),
+          );
+          if (success) Navigator.pop(context); // 성공 시 화면 닫기
+          else setState(() => _isProcessing = false); // 실패 시 다시 스캔 가능하게
         }
-        break; // 하나만 처리
+        break; // 하나만 인식하고 종료
       }
     }
   }
@@ -44,7 +41,7 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("QR SCAN")),
+      appBar: AppBar(title: const Text("Scan QR Code"), backgroundColor: Colors.black, foregroundColor: Colors.white),
       body: MobileScanner(
         onDetect: _onDetect,
       ),
