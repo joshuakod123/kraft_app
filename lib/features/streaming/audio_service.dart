@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 
-// [중요] Song 클래스 정의
+// [중요] 다른 파일에서 쓸 Song 모델
 class Song {
   final int id;
   final String title;
@@ -18,14 +18,17 @@ class Song {
   });
 }
 
+// 오디오 플레이어 (싱글톤)
 final audioPlayerProvider = Provider<AudioPlayer>((ref) {
   final player = AudioPlayer();
-  ref.onDispose(player.dispose);
+  ref.onDispose(() => player.dispose());
   return player;
 });
 
+// 현재 재생 중인 노래 상태
 final currentSongProvider = StateProvider<Song?>((ref) => null);
 
+// 상태 스트림들
 final playerStateProvider = StreamProvider<PlayerState>((ref) {
   final player = ref.watch(audioPlayerProvider);
   return player.playerStateStream;
@@ -41,6 +44,7 @@ final durationProvider = StreamProvider<Duration?>((ref) {
   return player.durationStream;
 });
 
+// 오디오 서비스 클래스
 final audioServiceProvider = Provider((ref) => AudioService(ref));
 
 class AudioService {
@@ -51,6 +55,7 @@ class AudioService {
 
   Future<void> playSong(Song song) async {
     _ref.read(currentSongProvider.notifier).state = song;
+
     try {
       await _player.setUrl(song.audioUrl);
       _player.play();

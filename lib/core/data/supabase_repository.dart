@@ -5,16 +5,30 @@ class SupabaseRepository {
   final SupabaseClient _client = Supabase.instance.client;
   User? get currentUser => _client.auth.currentUser;
 
-  // --- Auth ---
+  // ------------------------------------------------------------------------
+  // [Auth] 로그인 & 회원가입
+  // ------------------------------------------------------------------------
   Future<String?> signIn({required String email, required String password}) async {
-    try { await _client.auth.signInWithPassword(email: email, password: password); return null; } catch (e) { return e.toString(); }
+    try {
+      await _client.auth.signInWithPassword(email: email, password: password);
+      return null; // 성공 시 null 반환
+    } catch (e) {
+      return e.toString(); // 실패 시 에러 메시지 반환
+    }
   }
 
   Future<String?> signUp({required String email, required String password}) async {
-    try { await _client.auth.signUp(email: email, password: password); return null; } catch (e) { return e.toString(); }
+    try {
+      await _client.auth.signUp(email: email, password: password);
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
   }
 
-  // --- Profile ---
+  // ------------------------------------------------------------------------
+  // [Profile] 프로필 조회 및 수정 (학교, 학번 등 상세 정보 포함)
+  // ------------------------------------------------------------------------
   Future<bool> updateUserProfile({
     required String name,
     required String major,
@@ -28,6 +42,7 @@ class SupabaseRepository {
     try {
       final user = _client.auth.currentUser;
       if (user == null) return false;
+
       await _client.from('users').upsert({
         'id': user.id,
         'email': user.email,
@@ -42,7 +57,10 @@ class SupabaseRepository {
         'updated_at': DateTime.now().toIso8601String(),
       });
       return true;
-    } catch (e) { return false; }
+    } catch (e) {
+      debugPrint("Profile Update Error: $e");
+      return false;
+    }
   }
 
   Future<Map<String, dynamic>?> getUserProfile() async {
@@ -50,16 +68,20 @@ class SupabaseRepository {
       final userId = _client.auth.currentUser?.id;
       if (userId == null) return null;
       return await _client.from('users').select().eq('id', userId).maybeSingle();
-    } catch (e) { return null; }
+    } catch (e) {
+      return null;
+    }
   }
 
-  // --- Attendance (.count() 문법 수정) ---
+  // ------------------------------------------------------------------------
+  // [Attendance] 출석 체크 및 통계
+  // ------------------------------------------------------------------------
   Future<Map<String, int>> getAttendanceStats() async {
     try {
       final userId = _client.auth.currentUser?.id;
       if (userId == null) return {'attended': 0, 'total': 16};
 
-      // [수정] v2.8+ 에서는 .count()가 int를 바로 반환합니다.
+      // [중요] 최신 Supabase 문법 (.count 사용)
       final count = await _client
           .from('attendance')
           .count(CountOption.exact)
@@ -67,6 +89,7 @@ class SupabaseRepository {
 
       return {'attended': count, 'total': 16};
     } catch (e) {
+      debugPrint("Attendance Stats Error: $e");
       return {'attended': 0, 'total': 16};
     }
   }
@@ -75,45 +98,90 @@ class SupabaseRepository {
     try {
       final userId = _client.auth.currentUser?.id;
       if (userId == null) return false;
-      final check = await _client.from('attendance').select().eq('user_id', userId).eq('session_id', sessionId).maybeSingle();
-      if (check != null) return true;
-      await _client.from('attendance').insert({'user_id': userId, 'session_id': sessionId});
+
+      // 중복 출석 체크
+      final check = await _client.from('attendance')
+          .select()
+          .eq('user_id', userId)
+          .eq('session_id', sessionId)
+          .maybeSingle();
+
+      if (check != null) return true; // 이미 출석함
+
+      await _client.from('attendance').insert({
+        'user_id': userId,
+        'session_id': sessionId,
+      });
       return true;
-    } catch (e) { return false; }
+    } catch (e) {
+      debugPrint("Mark Attendance Error: $e");
+      return false;
+    }
   }
 
-  // --- Streaming (Community) ---
+  // ------------------------------------------------------------------------
+  // [Streaming] 좋아요 기능
+  // ------------------------------------------------------------------------
   Future<bool> toggleSongLike(int songId) async {
     try {
       final userId = _client.auth.currentUser!.id;
-      final existing = await _client.from('song_likes').select().eq('user_id', userId).eq('song_id', songId).maybeSingle();
+      final existing = await _client.from('song_likes')
+          .select()
+          .eq('user_id', userId)
+          .eq('song_id', songId)
+          .maybeSingle();
+
       if (existing != null) {
+        // 이미 좋아요 상태면 삭제 (취소)
         await _client.from('song_likes').delete().eq('id', existing['id']);
         return false;
       } else {
-        await _client.from('song_likes').insert({'user_id': userId, 'song_id': songId});
+        // 없으면 추가
+        await _client.from('song_likes').insert({
+          'user_id': userId,
+          'song_id': songId
+        });
         return true;
       }
-    } catch (e) { return false; }
+    } catch (e) {
+      debugPrint("Toggle Like Error: $e");
+      return false;
+    }
   }
 
   Stream<Map<String, dynamic>> getSongLikeStatus(int songId) {
+    // 실시간 반응을 위해 Stream으로 구현
     return Stream.fromFuture(Future(() async {
       try {
         final userId = _client.auth.currentUser?.id;
-        // [수정] .count() 문법 적용
-        final count = await _client.from('song_likes').count(CountOption.exact).eq('song_id', songId);
+
+        // 전체 좋아요 수 카운트
+        final count = await _client
+            .from('song_likes')
+            .count(CountOption.exact)
+            .eq('song_id', songId);
+
         bool isLiked = false;
         if (userId != null) {
-          final myLike = await _client.from('song_likes').select().eq('user_id', userId).eq('song_id', songId).maybeSingle();
+          // 내가 좋아요 눌렀는지 확인
+          final myLike = await _client
+              .from('song_likes')
+              .select()
+              .eq('user_id', userId)
+              .eq('song_id', songId)
+              .maybeSingle();
           isLiked = myLike != null;
         }
         return {'count': count, 'isLiked': isLiked};
-      } catch (e) { return {'count': 0, 'isLiked': false}; }
+      } catch (e) {
+        return {'count': 0, 'isLiked': false};
+      }
     }));
   }
 
-  // --- Community (게시판) ---
+  // ------------------------------------------------------------------------
+  // [Community] 게시판 기능
+  // ------------------------------------------------------------------------
   Future<void> addCommunityPost(String content, String category) async {
     try {
       final userId = _client.auth.currentUser!.id;
@@ -122,44 +190,123 @@ class SupabaseRepository {
         'content': content,
         'category': category,
       });
-    } catch (e) { debugPrint("Post Error: $e"); }
+    } catch (e) {
+      debugPrint("Post Error: $e");
+    }
   }
 
   Stream<List<Map<String, dynamic>>> getCommunityPosts() {
-    return _client.from('community_posts')
+    return _client
+        .from('community_posts')
         .stream(primaryKey: ['id'])
         .order('created_at', ascending: false)
         .asyncMap((posts) async {
+      // 게시글 작성자 정보(이름, 팀)를 같이 가져오기 위해 매핑
       List<Map<String, dynamic>> result = [];
       for (var p in posts) {
-        final user = await _client.from('users').select('name, team_id').eq('id', p['user_id']).maybeSingle();
+        final user = await _client
+            .from('users')
+            .select('name, team_id')
+            .eq('id', p['user_id'])
+            .maybeSingle();
         result.add({...p, 'user': user});
       }
       return result;
     });
   }
 
-  // --- Others ---
+  // ------------------------------------------------------------------------
+  // [Existing Features] 기존 커리큘럼, 공지사항, 개인일정 등 (삭제하지 않음!)
+  // ------------------------------------------------------------------------
   Stream<List<Map<String, dynamic>>> getCurriculumsStream(int teamId) {
-    return _client.from('curriculums').stream(primaryKey: ['id']).eq('team_id', teamId).order('event_date', ascending: true);
+    return _client.from('curriculums')
+        .stream(primaryKey: ['id'])
+        .eq('team_id', teamId)
+        .order('event_date', ascending: true);
   }
-  Future<bool> addCurriculum(String t, String d, DateTime date, DateTime? end, int tid) async {
-    try { await _client.from('curriculums').insert({'title': t, 'description': d, 'team_id': tid, 'event_date': date.toIso8601String(), 'end_time': end?.toIso8601String(), 'semester_id': 1}); return true; } catch (e) { return false; }
+
+  Future<bool> addCurriculum(String title, String desc, DateTime date, DateTime? endTime, int teamId) async {
+    try {
+      await _client.from('curriculums').insert({
+        'title': title,
+        'description': desc,
+        'team_id': teamId,
+        'event_date': date.toIso8601String(),
+        'end_time': endTime?.toIso8601String(),
+        'semester_id': 1
+      });
+      return true;
+    } catch (e) { return false; }
   }
-  Future<bool> deleteCurriculum(int id) async { try { await _client.from('curriculums').delete().eq('id', id); return true; } catch (e) { return false; } }
+
+  Future<bool> deleteCurriculum(int id) async {
+    try { await _client.from('curriculums').delete().eq('id', id); return true; } catch (e) { return false; }
+  }
+
   Stream<List<Map<String, dynamic>>> getPersonalSchedulesStream() {
-    final uid = _client.auth.currentUser?.id;
-    if (uid == null) return const Stream.empty();
-    return _client.from('personal_schedules').stream(primaryKey: ['id']).eq('user_id', uid).order('event_date', ascending: true);
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return const Stream.empty();
+    return _client.from('personal_schedules')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', userId)
+        .order('event_date', ascending: true);
   }
-  Future<bool> addPersonalSchedule(String t, String d, DateTime date, DateTime? end) async {
-    try { await _client.from('personal_schedules').insert({'user_id': _client.auth.currentUser!.id, 'title': t, 'description': d, 'event_date': date.toIso8601String(), 'end_time': end?.toIso8601String()}); return true; } catch (e) { return false; }
+
+  Future<bool> addPersonalSchedule(String title, String desc, DateTime date, DateTime? endTime) async {
+    try {
+      final userId = _client.auth.currentUser?.id;
+      if (userId == null) return false;
+      await _client.from('personal_schedules').insert({
+        'user_id': userId,
+        'title': title,
+        'description': desc,
+        'event_date': date.toIso8601String(),
+        'end_time': endTime?.toIso8601String()
+      });
+      return true;
+    } catch (e) { return false; }
   }
-  Future<bool> deletePersonalSchedule(int id) async { try { await _client.from('personal_schedules').delete().eq('id', id); return true; } catch (e) { return false; } }
-  Stream<List<Map<String, dynamic>>> getNoticesStream(int teamId) { return _client.from('notices').stream(primaryKey: ['id']).eq('team_id', teamId); }
-  Future<bool> addNotice(String t, String c, int tid) async { try { await _client.from('notices').insert({'title': t, 'content': c, 'team_id': tid}); return true; } catch (e) { return false; } }
-  Future<bool> deleteNotice(int id) async { try { await _client.from('notices').delete().eq('id', id); return true; } catch (e) { return false; } }
-  Stream<List<Map<String, dynamic>>> getMyArchivesStream() { return const Stream.empty(); }
-  Future<void> addArchive(String t, String d, String u) async {}
-  Future<bool> uploadAssignment(int id) async { return false; }
+
+  Future<bool> deletePersonalSchedule(int id) async {
+    try { await _client.from('personal_schedules').delete().eq('id', id); return true; } catch (e) { return false; }
+  }
+
+  Stream<List<Map<String, dynamic>>> getNoticesStream(int teamId) {
+    return _client.from('notices')
+        .stream(primaryKey: ['id'])
+        .eq('team_id', teamId)
+        .order('created_at', ascending: false);
+  }
+
+  Future<bool> addNotice(String title, String content, int teamId) async {
+    try { await _client.from('notices').insert({'title': title, 'content': content, 'team_id': teamId}); return true; } catch (e) { return false; }
+  }
+
+  Future<bool> deleteNotice(int id) async {
+    try { await _client.from('notices').delete().eq('id', id); return true; } catch (e) { return false; }
+  }
+
+  Stream<List<Map<String, dynamic>>> getMyArchivesStream() {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return const Stream.empty();
+    return _client.from('archives')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', userId)
+        .order('created_at', ascending: false);
+  }
+
+  Future<void> addArchive(String title, String description, String fileUrl) async {
+    try {
+      final userId = _client.auth.currentUser?.id;
+      if (userId == null) return;
+      await _client.from('archives').insert({
+        'user_id': userId,
+        'title': title,
+        'description': description,
+        'file_url': fileUrl
+      });
+    } catch (e) {}
+  }
+
+  Future<bool> uploadAssignment(int curriculumId) async { return false; }
 }

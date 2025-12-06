@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:glass_kit/glass_kit.dart';
+import '../../core/constants/department_enum.dart';
 import '../../core/data/supabase_repository.dart';
 import '../../core/state/global_providers.dart';
-import '../auth/auth_provider.dart'; // [필수] userDataProvider
+import '../auth/auth_provider.dart'; // [필수] userDataProvider import
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -39,6 +40,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final majorCtrl = TextEditingController(text: user['major']);
     final studentIdCtrl = TextEditingController(text: user['student_id']);
     final ageCtrl = TextEditingController(text: user['age']?.toString());
+    // 전화번호는 수정은 가능하게 하되, 메인 화면엔 안 보이게 함
     final phoneCtrl = TextEditingController(text: user['phone']);
     String? selectedGender = user['gender'];
 
@@ -54,7 +56,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               _field(nameCtrl, "Name"),
               _field(schoolCtrl, "School"),
               _field(majorCtrl, "Major"),
-              // [핵심] 학번 입력 필드 (Suffix 추가)
+
+              // [핵심 기능] 학번 입력 필드 (Suffix 추가)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10.0),
                 child: TextField(
@@ -68,8 +71,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ),
                 ),
               ),
+
               _field(ageCtrl, "Age", isNumber: true),
-              _field(phoneCtrl, "Phone"),
+              _field(phoneCtrl, "Phone"), // 수정할 땐 보임
+
               DropdownButtonFormField<String>(
                 value: ['Male', 'Female', 'Other'].contains(selectedGender) ? selectedGender : null,
                 dropdownColor: Colors.grey[900],
@@ -95,7 +100,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 age: int.tryParse(ageCtrl.text),
                 gender: selectedGender,
               );
-              ref.invalidate(userDataProvider);
+              ref.invalidate(userDataProvider); // 화면 갱신
               if (mounted) Navigator.pop(context);
             },
             child: const Text("Save"),
@@ -158,6 +163,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     children: [
+                      // 출석 현황판
                       GlassContainer.clearGlass(
                         height: 120, width: double.infinity, borderRadius: BorderRadius.circular(16),
                         child: Row(
@@ -177,7 +183,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         ),
                       ),
                       const SizedBox(height: 30),
-                      // [요청 반영] 원하는 정보만 표시
+
+                      // [요청 반영] 개인정보 (학교, 전공, 학번, 나이, 성별만 표시)
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(16)),
@@ -186,7 +193,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           _divider(),
                           _row("Major", user['major']),
                           _divider(),
-                          // 학번 표시 (숫자 + '학번')
+                          // 학번 표시: 숫자 + '학번'
                           _row("Student ID", user['student_id'] != null ? "${user['student_id']}학번" : null),
                           _divider(),
                           _row("Age", user['age']?.toString()),

@@ -139,4 +139,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
 extension on AuthNotifier {
   completeOnboarding({required String name, required String major, required String phone, required Department dept}) {}
+
+  void logout() {}
 }

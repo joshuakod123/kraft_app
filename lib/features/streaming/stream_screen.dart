@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:glass_kit/glass_kit.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:just_audio/just_audio.dart';
 import '../../core/state/global_providers.dart';
 import '../../core/data/supabase_repository.dart';
 import 'audio_service.dart'; // [필수]
@@ -34,29 +36,37 @@ class StreamScreen extends ConsumerWidget {
 
             Slider(
               activeColor: themeColor,
-              min: 0,
-              max: duration.inSeconds.toDouble(),
+              min: 0, max: duration.inSeconds.toDouble(),
               value: position.inSeconds.toDouble().clamp(0, duration.inSeconds.toDouble()),
               onChanged: (v) => audioService.seek(Duration(seconds: v.toInt())),
             ),
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                // 좋아요 버튼
-                IconButton(
-                    icon: const Icon(Icons.favorite_border, color: Colors.white, size: 30),
-                    onPressed: () => SupabaseRepository().toggleSongLike(songId)
+                // [수정] 댓글 버튼 삭제, 좋아요만 남김
+                StreamBuilder<Map<String, dynamic>>(
+                  stream: SupabaseRepository().getSongLikeStatus(songId),
+                  builder: (context, snapshot) {
+                    final isLiked = snapshot.data?['isLiked'] ?? false;
+                    final count = snapshot.data?['count'] ?? 0;
+                    return Column(
+                      children: [
+                        IconButton(
+                          icon: Icon(isLiked ? Icons.favorite : Icons.favorite_border, color: isLiked ? Colors.redAccent : Colors.white),
+                          onPressed: () => SupabaseRepository().toggleSongLike(songId),
+                        ),
+                        Text("$count", style: const TextStyle(color: Colors.white54))
+                      ],
+                    );
+                  },
                 ),
-                const SizedBox(width: 40),
-                // 재생 버튼
                 FloatingActionButton(
                   backgroundColor: themeColor,
                   onPressed: () => isPlaying ? audioService.pause() : audioService.play(),
                   child: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.black),
                 ),
-                const SizedBox(width: 40),
-                // (대칭을 위한 빈 아이콘)
-                const SizedBox(width: 48),
+                // 대칭을 위한 빈 공간 or 다음 곡 버튼
+                IconButton(onPressed: (){}, icon: const Icon(Icons.skip_next, color: Colors.white)),
               ],
             ),
             const Spacer(),
