@@ -10,6 +10,7 @@ class AttendanceScanScreen extends StatefulWidget {
 }
 
 class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
+  final SupabaseRepository _repo = SupabaseRepository();
   bool _isProcessing = false;
 
   void _onDetect(BarcodeCapture capture) async {
@@ -19,24 +20,23 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
     for (final barcode in barcodes) {
       if (barcode.rawValue != null) {
         setState(() => _isProcessing = true);
-        final sessionId = barcode.rawValue!;
 
-        final success = await SupabaseRepository().markAttendance(sessionId);
+        final success = await _repo.markAttendance(barcode.rawValue!);
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(success ? "✅ 출석 완료!" : "❌ 출석 실패"),
-              backgroundColor: success ? Colors.green : Colors.red,
-            ),
-          );
           if (success) {
-            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('✅ 출석 체크 완료!'), backgroundColor: Colors.green),
+            );
+            Navigator.pop(context); // 홈으로 복귀
           } else {
-            setState(() => _isProcessing = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('❌ 유효하지 않은 QR 코드입니다.'), backgroundColor: Colors.red),
+            );
+            setState(() => _isProcessing = false); // 재시도 가능하게
           }
         }
-        break;
+        break; // 하나만 처리
       }
     }
   }
@@ -44,8 +44,10 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Scan QR"), backgroundColor: Colors.black),
-      body: MobileScanner(onDetect: _onDetect),
+      appBar: AppBar(title: const Text("QR SCAN")),
+      body: MobileScanner(
+        onDetect: _onDetect,
+      ),
     );
   }
 }

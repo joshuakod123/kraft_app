@@ -135,9 +135,3 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 }
-
-extension on AuthNotifier {
-  signUp(String trim, String trim2) {}
-
-  login(String trim, String trim2) {}
-}

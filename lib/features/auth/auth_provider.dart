@@ -1,65 +1,99 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/constants/department_enum.dart';
+import '../../core/state/global_providers.dart';
 import '../../core/data/supabase_repository.dart';
 
-enum AuthStatus { initial, authenticated, unauthenticated, onboardingRequired }
+enum AuthStatus { initial, unauthenticated, onboardingRequired, authenticated }
 
-// [수정] StateNotifierProvider 사용 (가장 안정적이고 익숙한 방식)
-final authProvider = StateNotifierProvider<AuthNotifier, AuthStatus>((ref) {
-  return AuthNotifier();
-});
+class AuthNotifier extends Notifier<AuthStatus> {
+  final _repo = SupabaseRepository();
 
-class AuthNotifier extends StateNotifier<AuthStatus> {
-  AuthNotifier() : super(AuthStatus.initial) {
-    _init();
+  @override
+  AuthStatus build() {
+    // 앱 시작 시 무조건 초기화 로직 실행
+    Future.microtask(() => _initialize());
+    return AuthStatus.initial; // 초기 상태는 무조건 Loading
   }
 
-  final _supabase = Supabase.instance.client;
+  Future<void> _initialize() async {
+    // 2.5초 대기와 세션 체크를 병렬로 실행하되, 둘 다 끝날 때까지 대기
+    await Future.wait([
+      Future.delayed(const Duration(milliseconds: 2500)),
+      _checkSession(),
+    ]);
+  }
 
-  Future<void> _init() async {
-    final session = _supabase.auth.currentSession;
-    if (session == null) {
-      state = AuthStatus.unauthenticated;
-    } else {
-      await _checkOnboarding();
-    }
-
-    _supabase.auth.onAuthStateChange.listen((data) async {
-      if (data.event == AuthChangeEvent.signedIn) {
-        await _checkOnboarding();
-      } else if (data.event == AuthChangeEvent.signedOut) {
+  Future<void> _checkSession() async {
+    try {
+      final session = Supabase.instance.client.auth.currentSession;
+      if (session != null) {
+        final profile = await _repo.getUserProfile();
+        // 정보가 없으면 온보딩
+        if (profile == null || profile['name'] == null || profile['team_id'] == null) {
+          state = AuthStatus.onboardingRequired;
+        } else {
+          // 정보가 있으면 홈으로
+          _setGlobalState(profile);
+          state = AuthStatus.authenticated;
+        }
+      } else {
         state = AuthStatus.unauthenticated;
       }
-    });
-  }
-
-  Future<void> _checkOnboarding() async {
-    final userData = await SupabaseRepository().getUserProfile();
-    // 이름이 없으면 온보딩 필요
-    if (userData == null || userData['name'] == null) {
-      state = AuthStatus.onboardingRequired;
-    } else {
-      state = AuthStatus.authenticated;
+    } catch (e) {
+      state = AuthStatus.unauthenticated;
     }
   }
 
-  Future<void> signOut() async {
-    await _supabase.auth.signOut();
+  void _setGlobalState(Map<String, dynamic> profile) {
+    final teamId = profile['team_id'] as int?;
+    final dept = Department.values.firstWhere(
+          (d) => d.id == teamId,
+      orElse: () => Department.business,
+    );
+
+    // 전역 상태 설정
+    ref.read(currentDeptProvider.notifier).setDept(dept);
+    ref.read(isManagerProvider.notifier).setManager(profile['role'] == 'manager');
+  }
+
+  Future<void> login(String email, String password) async {
+    final error = await _repo.signIn(email: email, password: password);
+    if (error != null) throw error;
+    await _checkSession();
+  }
+
+  Future<void> signUp(String email, String password) async {
+    final error = await _repo.signUp(email: email, password: password);
+    if (error != null) throw error;
+  }
+
+  Future<void> completeOnboarding({
+    required String name,
+    required String major,
+    required String phone,
+    required Department dept,
+  }) async {
+    final success = await _repo.updateUserProfile(
+      name: name,
+      major: major,
+      phone: phone,
+      teamId: dept.id,
+    );
+
+    if (success) {
+      ref.read(currentDeptProvider.notifier).setDept(dept);
+      state = AuthStatus.authenticated;
+    } else {
+      throw "프로필 저장 실패";
+    }
+  }
+
+  Future<void> logout() async {
+    await Supabase.instance.client.auth.signOut();
     state = AuthStatus.unauthenticated;
   }
 }
 
-// [핵심] ProfileScreen에서 사용하는 유저 데이터 Provider
-final userDataProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
-  ref.watch(authProvider); // 로그인 상태가 바뀌면 다시 로드
-  return SupabaseRepository().getUserProfile();
-});
-
-// 관리자 여부 확인
-final isManagerProvider = Provider<bool>((ref) {
-  final userAsync = ref.watch(userDataProvider);
-  return userAsync.maybeWhen(
-    data: (user) => user?['role'] == 'manager' || user?['role'] == 'executive',
-    orElse: () => false,
-  );
-});
+final authProvider = NotifierProvider<AuthNotifier, AuthStatus>(AuthNotifier.new);
