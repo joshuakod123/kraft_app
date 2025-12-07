@@ -163,7 +163,7 @@ class SupabaseRepository {
     try {
       final response = await _client
           .from('community_posts')
-          .select('*, users(name)') // users 테이블의 name을 가져옴
+          .select('*, users(name, school, student_id, major, role)') // users 테이블의 name을 가져옴
           .order('created_at', ascending: false);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
@@ -210,7 +210,7 @@ class SupabaseRepository {
     try {
       final response = await _client
           .from('comments')
-          .select('*, users(name)')
+          .select('*, users(name, school, student_id, major, role)')
           .eq('post_id', postId)
           .order('created_at', ascending: true);
       return List<Map<String, dynamic>>.from(response);
@@ -233,6 +233,45 @@ class SupabaseRepository {
     } catch (e) {
       debugPrint("Add Comment Error: $e");
       return false;
+    }
+  }
+  // --- Likes (좋아요 기능) ---
+
+  // 1. 내가 이 글에 좋아요를 눌렀는지 확인
+  Future<bool> hasUserLiked(int postId) async {
+    final user = _client.auth.currentUser;
+    if (user == null) return false;
+
+    final data = await _client
+        .from('post_likes')
+        .select()
+        .eq('post_id', postId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+    return data != null;
+  }
+
+  // 2. 좋아요 개수 가져오기 [수정됨: 에러 해결]
+  Future<int> getLikeCount(int postId) async {
+    final count = await _client
+        .from('post_likes')
+        .count(CountOption.exact)
+        .eq('post_id', postId);
+
+    return count; // [수정] response.count가 아니라 count 자체를 반환해야 함
+  }
+
+  // 3. 좋아요 토글
+  Future<void> toggleLike(int postId) async {
+    final user = _client.auth.currentUser;
+    if (user == null) return;
+
+    final isLiked = await hasUserLiked(postId);
+
+    if (isLiked) {
+      await _client.from('post_likes').delete().eq('post_id', postId).eq('user_id', user.id);
+    } else {
+      await _client.from('post_likes').insert({'post_id': postId, 'user_id': user.id});
     }
   }
 
