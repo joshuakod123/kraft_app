@@ -15,6 +15,7 @@ import '../../features/admin/qr_create_screen.dart';
 import '../../features/attendance/attendance_scan_screen.dart';
 import '../../features/archive/archive_screen.dart';
 import '../../features/profile/profile_screen.dart';
+import '../../features/community/community_screen.dart'; // [New]
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authStateListenable = ValueNotifier<AuthStatus>(AuthStatus.initial);
@@ -83,10 +84,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(path: '/home', pageBuilder: (context, state) => NoTransitionPage(child: const HomeScreen())),
           GoRoute(path: '/upcoming', pageBuilder: (context, state) => NoTransitionPage(child: const CurriculumListScreen())),
-          GoRoute(path: '/archive', pageBuilder: (context, state) => NoTransitionPage(child: const ArchiveScreen())),
+          GoRoute(path: '/community', pageBuilder: (context, state) => NoTransitionPage(child: const CommunityScreen())),
           GoRoute(path: '/stream', pageBuilder: (context, state) => NoTransitionPage(child: const StreamScreen())),
           GoRoute(path: '/profile', pageBuilder: (context, state) => NoTransitionPage(child: const ProfileScreen())),
         ],
+      ),
+      GoRoute(
+        path: '/archive',
+        builder: (context, state) => const ArchiveScreen(),
       ),
     ],
   );

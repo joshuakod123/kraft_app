@@ -74,12 +74,18 @@ class AuthNotifier extends Notifier<AuthStatus> {
     required String major,
     required String phone,
     required Department dept,
+    required String school,
+    required String studentId,
+    required String gender,
   }) async {
     final success = await _repo.updateUserProfile(
       name: name,
       major: major,
       phone: phone,
       teamId: dept.id,
+      school: school,
+      studentId: studentId,
+      gender: gender,
     );
 
     if (success) {
