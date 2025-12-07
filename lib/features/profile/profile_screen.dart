@@ -5,7 +5,6 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/constants/department_enum.dart';
 import '../../core/data/supabase_repository.dart';
 import '../../features/auth/auth_provider.dart';
-import '../../core/state/global_providers.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
