@@ -3,22 +3,27 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseRepository {
   final SupabaseClient _client = Supabase.instance.client;
+
   User? get currentUser => _client.auth.currentUser;
 
   // --- Auth & Profile ---
   Future<String?> signIn({required String email, required String password}) async {
     try { await _client.auth.signInWithPassword(email: email, password: password); return null; } catch (e) { return e.toString(); }
   }
+
   Future<String?> signUp({required String email, required String password}) async {
     try { await _client.auth.signUp(email: email, password: password); return null; } catch (e) { return e.toString(); }
   }
+
   Future<Map<String, dynamic>?> getUserProfile() async {
     try {
       final userId = _client.auth.currentUser?.id;
       if (userId == null) return null;
-      return await _client.from('users').select().eq('id', userId).maybeSingle();
+      // teams 테이블과 조인하여 소속 정보도 가져옴
+      return await _client.from('users').select('*, teams(*)').eq('id', userId).maybeSingle();
     } catch (e) { return null; }
   }
+
   Future<bool> updateUserProfile({
     required String name,
     required String major,
@@ -31,20 +36,29 @@ class SupabaseRepository {
     try {
       final user = _client.auth.currentUser;
       if (user == null) return false;
+
+      // 학번으로 기수 계산 (예: 2023xxxx -> 23기)
+      int cohort = 0;
+      if (studentId.length >= 4) {
+        cohort = int.tryParse(studentId.substring(2, 4)) ?? 0;
+      }
+
       await _client.from('users').upsert({
         'id': user.id, 'email': user.email, 'name': name,
         'major': major, 'phone': phone, 'team_id': teamId,
         'school': school, 'student_id': studentId,
         'gender': gender,
+        'cohort': cohort, // 기수 저장
         'updated_at': DateTime.now().toIso8601String(),
       });
       return true;
     } catch (e) {
       debugPrint("Profile Update Error: $e");
-      return false; }
+      return false;
+    }
   }
 
-  // --- [공식 일정] Curriculums (날짜 + 시간) ---
+  // --- [공식 일정] Curriculums ---
   Stream<List<Map<String, dynamic>>> getCurriculumsStream(int teamId) {
     return _client
         .from('curriculums')
@@ -53,17 +67,16 @@ class SupabaseRepository {
         .order('event_date', ascending: true);
   }
 
-  // [수정] 종료 시간(endTime) 포함
   Future<bool> addCurriculum(String title, String desc, DateTime date, DateTime? endTime, int teamId) async {
     try {
       await _client.from('curriculums').insert({
         'title': title,
         'description': desc,
-        'week_number': 0, // 필요시 계산 로직 추가
+        'week_number': 0,
         'team_id': teamId,
         'event_date': date.toIso8601String(),
         'end_time': endTime?.toIso8601String(),
-        'semester_id': 1, // 기본값
+        'semester_id': 1,
       });
       return true;
     } catch (e) {
@@ -76,7 +89,7 @@ class SupabaseRepository {
     try { await _client.from('curriculums').delete().eq('id', id); return true; } catch (e) { return false; }
   }
 
-  // --- [개인 일정] Personal Schedules (날짜 + 시간) ---
+  // --- [개인 일정] Personal Schedules ---
   Stream<List<Map<String, dynamic>>> getPersonalSchedulesStream() {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return const Stream.empty();
@@ -88,7 +101,6 @@ class SupabaseRepository {
         .order('event_date', ascending: true);
   }
 
-  // [수정] 종료 시간(endTime) 포함
   Future<bool> addPersonalSchedule(String title, String desc, DateTime date, DateTime? endTime) async {
     try {
       final userId = _client.auth.currentUser?.id;
@@ -123,7 +135,7 @@ class SupabaseRepository {
     try { await _client.from('notices').delete().eq('id', id); return true; } catch (e) { return false; }
   }
 
-  // --- Archives (New) ---
+  // --- Archives ---
   Stream<List<Map<String, dynamic>>> getMyArchivesStream() {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return const Stream.empty();
@@ -145,59 +157,36 @@ class SupabaseRepository {
         'title': title,
         'description': description,
         'file_url': fileUrl,
-        'file_type': 'image', // 기본값
+        'file_type': 'image',
       });
     } catch (e) {
       debugPrint("Add Archive Error: $e");
     }
   }
-  //streaming
-  // lib/core/data/supabase_repository.dart 내용에 추가
 
-  // --- [Music Social Features] ---
+  // --- [Music Social Features] (수정됨: _supabase -> _client) ---
 
-  // 1. 댓글 가져오기 (작성자 정보 포함)
-  Stream<List<Map<String, dynamic>>> getSongComments(int songId) {
-    return _supabase
-        .from('song_comments')
-        .stream(primaryKey: ['id'])
-        .eq('song_id', songId)
-        .order('created_at', ascending: false) // 최신순
-        .map((rows) async {
-      // Stream은 join이 까다로우므로, 데이터가 올 때마다 유저 정보를 매핑하거나
-      // 더 간단하게는 Future로 구현하는 것이 일반적이나, 실시간성을 위해 이렇게 처리합니다.
-      // *Supabase의 .select('*, users(*)') 구문은 Stream에서 제한적이므로
-      // 간단하게 Future 방식을 StreamController로 감싸거나, 여기서는 Future 호출 방식을 추천합니다.
-      // 하지만 UI에서 StreamBuilder를 쓰기 위해 여기서는 .select()를 쓴 Future 함수를 만듭니다.
-      return rows;
-    })
-        .asyncMap((event) async {
-      // 팁: 복잡한 조인이 필요한 실시간 채팅은 단순 polling이나
-      // DB Function을 쓰기도 하지만, 여기서는 가장 쉬운 select query로 대체합니다.
-      return [];
-    });
-  }
-
-  // [수정] 댓글 가져오기 (실시간 포기하고 Future로 구현 - 조인이 쉬움)
+  // 1. 댓글 가져오기
   Future<List<Map<String, dynamic>>> fetchComments(int songId) async {
     try {
-      final response = await _supabase
+      final response = await _client // _supabase 대신 _client 사용
           .from('song_comments')
-          .select('*, users(name, cohort, id)') // users 테이블 조인
+          .select('*, users(name, cohort, id)')
           .eq('song_id', songId)
           .order('created_at', ascending: false);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
+      debugPrint("Fetch Comments Error: $e");
       return [];
     }
   }
 
   // 2. 댓글 작성
   Future<void> addComment(int songId, String content) async {
-    final userId = _supabase.auth.currentUser?.id;
+    final userId = _client.auth.currentUser?.id;
     if (userId == null) return;
 
-    await _supabase.from('song_comments').insert({
+    await _client.from('song_comments').insert({
       'song_id': songId,
       'user_id': userId,
       'content': content,
@@ -206,51 +195,54 @@ class SupabaseRepository {
 
   // 3. 좋아요 상태 확인
   Future<bool> isSongLiked(int songId) async {
-    final userId = _supabase.auth.currentUser?.id;
+    final userId = _client.auth.currentUser?.id;
     if (userId == null) return false;
 
-    final response = await _supabase
-        .from('song_likes')
-        .select()
-        .eq('user_id', userId)
-        .eq('song_id', songId)
-        .maybeSingle();
-    return response != null;
+    try {
+      final response = await _client
+          .from('song_likes')
+          .select()
+          .eq('user_id', userId)
+          .eq('song_id', songId)
+          .maybeSingle();
+      return response != null;
+    } catch (e) {
+      return false;
+    }
   }
 
-  // 4. 좋아요 토글 (Toggle)
+  // 4. 좋아요 토글
   Future<bool> toggleSongLike(int songId) async {
-    final userId = _supabase.auth.currentUser?.id;
+    final userId = _client.auth.currentUser?.id;
     if (userId == null) return false;
 
     final isLiked = await isSongLiked(songId);
     if (isLiked) {
-      await _supabase
+      await _client
           .from('song_likes')
           .delete()
           .eq('user_id', userId)
           .eq('song_id', songId);
-      return false; // 좋아요 취소됨
+      return false; // 취소됨
     } else {
-      await _supabase.from('song_likes').insert({
+      await _client.from('song_likes').insert({
         'user_id': userId,
         'song_id': songId,
       });
-      return true; // 좋아요 됨
+      return true; // 좋아요됨
     }
   }
+
   // --- Team Members ---
-  // 같은 부서의 멤버 리스트를 가져오는 함수 (임원진 -> 이름순 정렬)
   Future<List<Map<String, dynamic>>> getTeamMembers(int teamId) async {
     try {
       final response = await _client
           .from('users')
           .select()
           .eq('team_id', teamId)
-          .order('role', ascending: true) // manager(m)가 member(m)보다 뒤에 오므로 로직 처리 필요, 일단 가져옴
+          .order('role', ascending: true)
           .order('name', ascending: true);
 
-      // 'manager'가 리스트 상단에 오도록 클라이언트 측 정렬 보정
       final List<Map<String, dynamic>> members = List<Map<String, dynamic>>.from(response);
       members.sort((a, b) {
         if (a['role'] == 'manager' && b['role'] != 'manager') return -1;
@@ -274,10 +266,9 @@ class SupabaseRepository {
     } catch (e) { return []; }
   }
 
-  Future<bool> uploadAssignment(int curriculumId) async { return false; } // 추후 구현
+  Future<bool> uploadAssignment(int curriculumId) async { return false; }
 
   Future<bool> markAttendance(String qrData) async {
-    // QR 데이터 파싱 및 출석 처리 로직 (생략)
     return true;
   }
 
