@@ -151,131 +151,6 @@ class SupabaseRepository {
       debugPrint("Add Archive Error: $e");
     }
   }
-
-  Stream<List<Map<String, dynamic>>> getCommunityPostsStream() {
-    return _client
-        .from('community_posts')
-        .stream(primaryKey: ['id'])
-        .order('created_at', ascending: false)
-        .map((data) => data);
-  }
-  Future<List<Map<String, dynamic>>> getCommunityPostsWithUser() async {
-    try {
-      final response = await _client
-          .from('community_posts')
-          .select('*, users(name, school, student_id, major, role)') // users 테이블의 name을 가져옴
-          .order('created_at', ascending: false);
-      return List<Map<String, dynamic>>.from(response);
-    } catch (e) {
-      debugPrint("Fetch Posts Error: $e");
-      return [];
-    }
-  }
-  Future<bool> addCommunityPost(String content, String category) async {
-    try {
-      final user = _client.auth.currentUser;
-      if (user == null) return false;
-
-      await _client.from('community_posts').insert({
-        'user_id': user.id,
-        'content': content,
-        'category': category,
-      });
-      return true;
-    } catch (e) {
-      debugPrint("Add Post Error: $e");
-      return false;
-    }
-  }
-
-  Future<bool> deleteCommunityPost(int postId) async {
-    try {
-      await _client.from('community_posts').delete().eq('id', postId);
-      return true;
-    } catch (e) {
-      debugPrint("Delete Post Error: $e");
-      return false;
-    }
-  }
-  Stream<List<Map<String, dynamic>>> getCommentsStream(int postId) {
-    return _client
-        .from('comments')
-        .stream(primaryKey: ['id'])
-        .eq('post_id', postId)
-        .order('created_at', ascending: true);
-  }
-
-  // [추가] 댓글 작성자 이름 가져오기 위한 Future
-  Future<List<Map<String, dynamic>>> getCommentsWithUser(int postId) async {
-    try {
-      final response = await _client
-          .from('comments')
-          .select('*, users(name, school, student_id, major, role)')
-          .eq('post_id', postId)
-          .order('created_at', ascending: true);
-      return List<Map<String, dynamic>>.from(response);
-    } catch (e) {
-      return [];
-    }
-  }
-
-  Future<bool> addComment(int postId, String content) async {
-    try {
-      final user = _client.auth.currentUser;
-      if (user == null) return false;
-
-      await _client.from('comments').insert({
-        'post_id': postId,
-        'user_id': user.id,
-        'content': content,
-      });
-      return true;
-    } catch (e) {
-      debugPrint("Add Comment Error: $e");
-      return false;
-    }
-  }
-  // --- Likes (좋아요 기능) ---
-
-  // 1. 내가 이 글에 좋아요를 눌렀는지 확인
-  Future<bool> hasUserLiked(int postId) async {
-    final user = _client.auth.currentUser;
-    if (user == null) return false;
-
-    final data = await _client
-        .from('post_likes')
-        .select()
-        .eq('post_id', postId)
-        .eq('user_id', user.id)
-        .maybeSingle();
-    return data != null;
-  }
-
-  // 2. 좋아요 개수 가져오기 [수정됨: 에러 해결]
-  Future<int> getLikeCount(int postId) async {
-    final count = await _client
-        .from('post_likes')
-        .count(CountOption.exact)
-        .eq('post_id', postId);
-
-    return count; // [수정] response.count가 아니라 count 자체를 반환해야 함
-  }
-
-  // 3. 좋아요 토글
-  Future<void> toggleLike(int postId) async {
-    final user = _client.auth.currentUser;
-    if (user == null) return;
-
-    final isLiked = await hasUserLiked(postId);
-
-    if (isLiked) {
-      await _client.from('post_likes').delete().eq('post_id', postId).eq('user_id', user.id);
-    } else {
-      await _client.from('post_likes').insert({'post_id': postId, 'user_id': user.id});
-    }
-  }
-  // 기존 코드 내부에 아래 함수를 추가하세요.
-
   // --- Team Members ---
   // 같은 부서의 멤버 리스트를 가져오는 함수 (임원진 -> 이름순 정렬)
   Future<List<Map<String, dynamic>>> getTeamMembers(int teamId) async {
@@ -301,7 +176,7 @@ class SupabaseRepository {
       return [];
     }
   }
-  
+
   Future<List<Map<String, dynamic>>> getMyAssignments() async {
     try {
       final userId = _client.auth.currentUser?.id;
