@@ -1,9 +1,11 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_animate/flutter_animate.dart';
-import 'dart:ui'; // Glass effect
 import '../../core/state/global_providers.dart';
+import '../../features/streaming/mini_player.dart';
+import '../../features/streaming/player_provider.dart'; // [1] 위에서 만든 Provider 임포트
 
 class MainShell extends ConsumerWidget {
   final Widget child;
@@ -12,72 +14,77 @@ class MainShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // 현재 활성화된 탭 인덱스 계산
+    // 1. 현재 탭 위치 파악
     final String location = GoRouterState.of(context).uri.toString();
     int currentIndex = 0;
+    if (location.startsWith('/upcoming')) currentIndex = 1;
+    else if (location.startsWith('/team_members')) currentIndex = 2;
+    else if (location.startsWith('/stream')) currentIndex = 3;
+    else if (location.startsWith('/profile')) currentIndex = 4;
 
-    // [변경] 라우트 매칭 로직 수정 (archive -> community)
-    if (location.startsWith('/home')) {
-      currentIndex = 0;
-    } else if (location.startsWith('/upcoming')) {
-      currentIndex = 1;
-    } else if (location.startsWith('/team_members')) {
-      currentIndex = 2;
-    } else if (location.startsWith('/stream')) {
-      currentIndex = 3;
-    } else if (location.startsWith('/profile')) {
-      currentIndex = 4;
-    }
+    // 2. [핵심] 현재 재생 중인 곡 가져오기
+    final currentSong = ref.watch(currentSongProvider);
+
+    // 3. 미니 플레이어 표시 여부 결정
+    // 노래가 있고(null 아님) && 현재 탭이 스트리밍 탭(3)이 아닐 때만 표시
+    final bool showMiniPlayer = currentSong != null && currentIndex != 3;
 
     return Scaffold(
       backgroundColor: Colors.black,
-      extendBody: true, // 바디를 네비게이션 바 뒤까지 확장
+      extendBody: true,
       body: Stack(
         children: [
-          // 1. 메인 컨텐츠
+          // 탭 화면
           child,
 
-          // 2. Floating Bottom Navigation Bar
+          // [핵심 기능 구현] 미니 플레이어 (조건부 렌더링)
+          if (showMiniPlayer)
+            Positioned(
+              bottom: 110, // 네비게이션 바 위
+              left: 20,
+              right: 20,
+              child: MiniPlayer(song: currentSong) // 데이터 전달
+                  .animate()
+                  .slideY(begin: 1, end: 0, curve: Curves.easeOutBack, duration: 400.ms)
+                  .fadeIn(),
+            ),
+
+          // 하단 네비게이션 바
           Positioned(
             bottom: 30,
             left: 20,
             right: 20,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(30),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                child: Container(
-                  height: 70,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E1E1E).withValues(alpha: 0.85),
-                    borderRadius: BorderRadius.circular(30),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 20,
-                        offset: const Offset(0, 10),
-                      )
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _NavBarIcon(icon: Icons.home_rounded, index: 0, currentIndex: currentIndex, path: '/home'),
-                      _NavBarIcon(icon: Icons.calendar_month_rounded, index: 1, currentIndex: currentIndex, path: '/upcoming'),
-
-                      // [변경] 폴더 아이콘 -> 커뮤니티 아이콘 / 경로 변경
-                      _NavBarIcon(icon: Icons.groups_3_rounded, index: 2, currentIndex: currentIndex, path: '/team_members'),
-
-                      _NavBarIcon(icon: Icons.play_circle_outline_rounded, index: 3, currentIndex: currentIndex, path: '/stream'),
-                      _NavBarIcon(icon: Icons.person_outline_rounded, index: 4, currentIndex: currentIndex, path: '/profile'),
-                    ],
-                  ),
-                ),
-              ),
-            ).animate().slideY(begin: 1, end: 0, duration: 600.ms, curve: Curves.easeOutBack),
+            child: _buildGlassNavBar(context, currentIndex, ref),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildGlassNavBar(BuildContext context, int currentIndex, WidgetRef ref) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(30),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          height: 70,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E1E1E).withOpacity(0.85),
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: Colors.white.withOpacity(0.1)),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _NavBarIcon(icon: Icons.home_rounded, index: 0, currentIndex: currentIndex, path: '/home'),
+              _NavBarIcon(icon: Icons.calendar_month_rounded, index: 1, currentIndex: currentIndex, path: '/upcoming'),
+              _NavBarIcon(icon: Icons.groups_3_rounded, index: 2, currentIndex: currentIndex, path: '/team_members'),
+              _NavBarIcon(icon: Icons.play_circle_outline_rounded, index: 3, currentIndex: currentIndex, path: '/stream'),
+              _NavBarIcon(icon: Icons.person_outline_rounded, index: 4, currentIndex: currentIndex, path: '/profile'),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -89,50 +96,20 @@ class _NavBarIcon extends ConsumerWidget {
   final int currentIndex;
   final String path;
 
-  const _NavBarIcon({
-    super.key,
-    required this.icon,
-    required this.index,
-    required this.currentIndex,
-    required this.path,
-  });
+  const _NavBarIcon({super.key, required this.icon, required this.index, required this.currentIndex, required this.path});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // 현재 부서 색상 가져오기
     final dept = ref.watch(currentDeptProvider);
-    final themeColor = dept.color;
-
     final isSelected = index == currentIndex;
-    // 선택된 경우 부서 색상 사용
-    final color = isSelected ? themeColor : Colors.grey;
-
     return GestureDetector(
       onTap: () => context.go(path),
       behavior: HitTestBehavior.opaque,
       child: Container(
         padding: const EdgeInsets.all(12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 26)
-                .animate(target: isSelected ? 1 : 0)
-                .scale(begin: const Offset(1, 1), end: const Offset(1.2, 1.2), duration: 200.ms),
-
-            const SizedBox(height: 4),
-
-            // 선택 표시 점 (Indicator)
-            Container(
-              width: 4,
-              height: 4,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                // 인디케이터 색상도 부서 색상으로
-                color: isSelected ? themeColor : Colors.transparent,
-              ),
-            ).animate(target: isSelected ? 1 : 0).scale(),
-          ],
-        ),
+        child: Icon(icon, color: isSelected ? dept.color : Colors.grey, size: 26)
+            .animate(target: isSelected ? 1 : 0)
+            .scale(begin: const Offset(1, 1), end: const Offset(1.2, 1.2), duration: 200.ms),
       ),
     );
   }
