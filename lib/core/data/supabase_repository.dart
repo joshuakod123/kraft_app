@@ -151,6 +151,94 @@ class SupabaseRepository {
       debugPrint("Add Archive Error: $e");
     }
   }
+  //streaming
+  // lib/core/data/supabase_repository.dart 내용에 추가
+
+  // --- [Music Social Features] ---
+
+  // 1. 댓글 가져오기 (작성자 정보 포함)
+  Stream<List<Map<String, dynamic>>> getSongComments(int songId) {
+    return _supabase
+        .from('song_comments')
+        .stream(primaryKey: ['id'])
+        .eq('song_id', songId)
+        .order('created_at', ascending: false) // 최신순
+        .map((rows) async {
+      // Stream은 join이 까다로우므로, 데이터가 올 때마다 유저 정보를 매핑하거나
+      // 더 간단하게는 Future로 구현하는 것이 일반적이나, 실시간성을 위해 이렇게 처리합니다.
+      // *Supabase의 .select('*, users(*)') 구문은 Stream에서 제한적이므로
+      // 간단하게 Future 방식을 StreamController로 감싸거나, 여기서는 Future 호출 방식을 추천합니다.
+      // 하지만 UI에서 StreamBuilder를 쓰기 위해 여기서는 .select()를 쓴 Future 함수를 만듭니다.
+      return rows;
+    })
+        .asyncMap((event) async {
+      // 팁: 복잡한 조인이 필요한 실시간 채팅은 단순 polling이나
+      // DB Function을 쓰기도 하지만, 여기서는 가장 쉬운 select query로 대체합니다.
+      return [];
+    });
+  }
+
+  // [수정] 댓글 가져오기 (실시간 포기하고 Future로 구현 - 조인이 쉬움)
+  Future<List<Map<String, dynamic>>> fetchComments(int songId) async {
+    try {
+      final response = await _supabase
+          .from('song_comments')
+          .select('*, users(name, cohort, id)') // users 테이블 조인
+          .eq('song_id', songId)
+          .order('created_at', ascending: false);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // 2. 댓글 작성
+  Future<void> addComment(int songId, String content) async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+
+    await _supabase.from('song_comments').insert({
+      'song_id': songId,
+      'user_id': userId,
+      'content': content,
+    });
+  }
+
+  // 3. 좋아요 상태 확인
+  Future<bool> isSongLiked(int songId) async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return false;
+
+    final response = await _supabase
+        .from('song_likes')
+        .select()
+        .eq('user_id', userId)
+        .eq('song_id', songId)
+        .maybeSingle();
+    return response != null;
+  }
+
+  // 4. 좋아요 토글 (Toggle)
+  Future<bool> toggleSongLike(int songId) async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return false;
+
+    final isLiked = await isSongLiked(songId);
+    if (isLiked) {
+      await _supabase
+          .from('song_likes')
+          .delete()
+          .eq('user_id', userId)
+          .eq('song_id', songId);
+      return false; // 좋아요 취소됨
+    } else {
+      await _supabase.from('song_likes').insert({
+        'user_id': userId,
+        'song_id': songId,
+      });
+      return true; // 좋아요 됨
+    }
+  }
   // --- Team Members ---
   // 같은 부서의 멤버 리스트를 가져오는 함수 (임원진 -> 이름순 정렬)
   Future<List<Map<String, dynamic>>> getTeamMembers(int teamId) async {
