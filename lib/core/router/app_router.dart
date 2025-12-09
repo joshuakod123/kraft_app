@@ -16,6 +16,8 @@ import '../../features/attendance/attendance_scan_screen.dart';
 import '../../features/archive/archive_screen.dart';
 import '../../features/profile/profile_screen.dart';
 import '../../features/community/community_screen.dart';
+import '../../features/home/team_member_screen.dart';
+
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authStateListenable = ValueNotifier<AuthStatus>(AuthStatus.initial);
@@ -82,7 +84,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/home', pageBuilder: (context, state) => NoTransitionPage(child: const HomeScreen())),
           GoRoute(path: '/upcoming', pageBuilder: (context, state) => NoTransitionPage(child: const CurriculumListScreen())),
 
-          // [수정] Community 경로 하위에 Detail 경로 추가 (이동 문제 해결)
+          GoRoute(path: '/team_members', pageBuilder: (context, state) => NoTransitionPage(child: const TeamMemberScreen())),
           GoRoute(
             path: '/community',
             pageBuilder: (context, state) => NoTransitionPage(child: const CommunityScreen()),

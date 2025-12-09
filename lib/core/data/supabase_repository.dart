@@ -274,7 +274,34 @@ class SupabaseRepository {
       await _client.from('post_likes').insert({'post_id': postId, 'user_id': user.id});
     }
   }
+  // 기존 코드 내부에 아래 함수를 추가하세요.
 
+  // --- Team Members ---
+  // 같은 부서의 멤버 리스트를 가져오는 함수 (임원진 -> 이름순 정렬)
+  Future<List<Map<String, dynamic>>> getTeamMembers(int teamId) async {
+    try {
+      final response = await _client
+          .from('users')
+          .select()
+          .eq('team_id', teamId)
+          .order('role', ascending: true) // manager(m)가 member(m)보다 뒤에 오므로 로직 처리 필요, 일단 가져옴
+          .order('name', ascending: true);
+
+      // 'manager'가 리스트 상단에 오도록 클라이언트 측 정렬 보정
+      final List<Map<String, dynamic>> members = List<Map<String, dynamic>>.from(response);
+      members.sort((a, b) {
+        if (a['role'] == 'manager' && b['role'] != 'manager') return -1;
+        if (a['role'] != 'manager' && b['role'] == 'manager') return 1;
+        return (a['name'] ?? '').compareTo(b['name'] ?? '');
+      });
+
+      return members;
+    } catch (e) {
+      debugPrint("Fetch Team Members Error: $e");
+      return [];
+    }
+  }
+  
   Future<List<Map<String, dynamic>>> getMyAssignments() async {
     try {
       final userId = _client.auth.currentUser?.id;

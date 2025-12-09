@@ -21,7 +21,7 @@ class MainShell extends ConsumerWidget {
       currentIndex = 0;
     } else if (location.startsWith('/upcoming')) {
       currentIndex = 1;
-    } else if (location.startsWith('/community')) {
+    } else if (location.startsWith('/team_members')) {
       currentIndex = 2;
     } else if (location.startsWith('/stream')) {
       currentIndex = 3;
@@ -67,7 +67,7 @@ class MainShell extends ConsumerWidget {
                       _NavBarIcon(icon: Icons.calendar_month_rounded, index: 1, currentIndex: currentIndex, path: '/upcoming'),
 
                       // [변경] 폴더 아이콘 -> 커뮤니티 아이콘 / 경로 변경
-                      _NavBarIcon(icon: Icons.forum_rounded, index: 2, currentIndex: currentIndex, path: '/community'),
+                      _NavBarIcon(icon: Icons.groups_3_rounded, index: 2, currentIndex: currentIndex, path: '/team_members'),
 
                       _NavBarIcon(icon: Icons.play_circle_outline_rounded, index: 3, currentIndex: currentIndex, path: '/stream'),
                       _NavBarIcon(icon: Icons.person_outline_rounded, index: 4, currentIndex: currentIndex, path: '/profile'),
