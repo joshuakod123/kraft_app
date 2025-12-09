@@ -8,17 +8,12 @@ import '../../core/constants/department_enum.dart';
 import '../../core/data/supabase_repository.dart';
 import '../../core/state/global_providers.dart';
 
-// -----------------------------------------------------------------------------
-// Provider: 현재 선택된 부서의 멤버 리스트 가져오기
-// -----------------------------------------------------------------------------
+// Provider 등 상단 코드는 그대로 유지
 final teamMembersProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   final dept = ref.watch(currentDeptProvider);
   return SupabaseRepository().getTeamMembers(dept.id);
 });
 
-// -----------------------------------------------------------------------------
-// Screen: 멤버 리스트 화면
-// -----------------------------------------------------------------------------
 class TeamMemberScreen extends ConsumerWidget {
   const TeamMemberScreen({super.key});
 
@@ -45,7 +40,6 @@ class TeamMemberScreen extends ConsumerWidget {
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Container(
-        // 배경 그라데이션
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -63,9 +57,7 @@ class TeamMemberScreen extends ConsumerWidget {
           data: (members) {
             return Column(
               children: [
-                const SizedBox(height: 100), // AppBar 공간 확보
-
-                // [리스트 헤더]
+                const SizedBox(height: 100),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
                   child: Row(
@@ -95,12 +87,10 @@ class TeamMemberScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-
-                // [멤버 리스트]
                 Expanded(
                   child: ListView.separated(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    itemCount: members.length + 1, // 하단 여백용 +1
+                    itemCount: members.length + 1,
                     separatorBuilder: (_, __) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
                       if (index == members.length) return const SizedBox(height: 120);
@@ -117,11 +107,13 @@ class TeamMemberScreen extends ConsumerWidget {
     );
   }
 
-  // 리스트 아이템 위젯
   Widget _buildMemberTile(BuildContext context, Map<String, dynamic> user, Department dept) {
     final name = user['name'] ?? 'Unknown';
     final email = user['email'] ?? '';
     final role = user['role'] ?? 'member';
+    // 기수 정보 리스트에도 표시 (선택사항)
+    final cohort = user['cohort'];
+
     final isManager = role == 'manager';
     final initial = name.isNotEmpty ? name.substring(0, 1) : '?';
 
@@ -151,7 +143,6 @@ class TeamMemberScreen extends ConsumerWidget {
           ),
           child: Row(
             children: [
-              // 아바타 (Hero 연결)
               Hero(
                 tag: 'avatar-${user['id']}',
                 child: Container(
@@ -178,19 +169,29 @@ class TeamMemberScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: 16),
-
-              // 이름 및 이메일
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      name,
-                      style: GoogleFonts.notoSans(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          name,
+                          style: GoogleFonts.notoSans(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        // 리스트에서 이름 옆에 작게 기수 표시
+                        if (cohort != null) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            "${cohort}기",
+                            style: TextStyle(color: dept.color.withOpacity(0.8), fontSize: 12),
+                          ),
+                        ]
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -202,8 +203,6 @@ class TeamMemberScreen extends ConsumerWidget {
                   ],
                 ),
               ),
-
-              // 우측 아이콘
               if (isManager)
                 Icon(Icons.stars_rounded, color: dept.color, size: 24)
               else
@@ -215,7 +214,6 @@ class TeamMemberScreen extends ConsumerWidget {
     );
   }
 
-  // 팝업 다이얼로그 호출 함수
   void _showProfileDialog(BuildContext context, Map<String, dynamic> user, Department dept) {
     showGeneralDialog(
       context: context,
@@ -237,7 +235,7 @@ class TeamMemberScreen extends ConsumerWidget {
 }
 
 // -----------------------------------------------------------------------------
-// Widget: 상세 프로필 팝업 카드 (수정된 버전)
+// 상세 프로필 팝업 카드 (한글화 및 기수 연동)
 // -----------------------------------------------------------------------------
 class MemberProfileCard extends StatelessWidget {
   final Map<String, dynamic> user;
@@ -251,19 +249,17 @@ class MemberProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = user['name'] ?? 'Unknown';
+    final name = user['name'] ?? '알 수 없음';
     final email = user['email'] ?? '-';
-    final major = user['major'] ?? 'Major';
-    final studentId = user['student_id'] ?? 'Unknown';
+    final major = user['major'] ?? '전공 미입력';
+    final studentId = user['student_id'] ?? '미입력';
     final role = user['role'] ?? 'member';
-    final school = user['school'] ?? 'Univ';
+    final school = user['school'] ?? '대학교';
     final initial = name.isNotEmpty ? name.substring(0, 1) : '?';
 
-    // [기수 계산 로직]
-    String generation = "Unknown";
-    if (studentId.length >= 4) {
-      generation = "${studentId.substring(2, 4)}th Gen";
-    }
+    // [수정] DB에서 기수 정보 가져오기
+    final cohort = user['cohort'];
+    final generationString = cohort != null ? "${cohort}기" : "기수 미정";
 
     final isManager = role == 'manager';
     final themeColor = isManager ? dept.color : Colors.white;
@@ -271,17 +267,13 @@ class MemberProfileCard extends StatelessWidget {
     return Center(
       child: Material(
         color: Colors.transparent,
-        // [수정] ConstrainedBox로 감싸서 크기 제한 적용
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.65, // 화면 높이의 65% 제한
+            maxHeight: MediaQuery.of(context).size.height * 0.65,
             maxWidth: MediaQuery.of(context).size.width * 0.85,
           ),
           child: GlassContainer(
-            // height: double.infinity, // [제거] 높이 무한대 제거 -> 내용물에 맞춤
-            // constraints: ... // [제거] 이 속성이 에러 원인이었음
             width: MediaQuery.of(context).size.width * 0.85,
-
             borderRadius: BorderRadius.circular(24),
             borderWidth: 1.5,
             borderColor: themeColor.withOpacity(0.3),
@@ -295,7 +287,7 @@ class MemberProfileCard extends StatelessWidget {
             ),
             blur: 20.0,
             child: Column(
-              mainAxisSize: MainAxisSize.min, // 내용물 크기만큼만 차지
+              mainAxisSize: MainAxisSize.min,
               children: [
                 // [1. 상단 배너 및 아바타]
                 SizedBox(
@@ -303,7 +295,6 @@ class MemberProfileCard extends StatelessWidget {
                   child: Stack(
                     alignment: Alignment.topCenter,
                     children: [
-                      // 컬러 배너
                       Container(
                         height: 90,
                         decoration: BoxDecoration(
@@ -315,7 +306,6 @@ class MemberProfileCard extends StatelessWidget {
                           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                         ),
                       ),
-                      // 아바타
                       Positioned(
                         top: 40,
                         child: Hero(
@@ -380,7 +370,7 @@ class MemberProfileCard extends StatelessWidget {
 
                 const SizedBox(height: 24),
 
-                // [3. 정보 박스 (Grid Style)]
+                // [3. 정보 박스 (한글 라벨)]
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Column(
@@ -388,25 +378,25 @@ class MemberProfileCard extends StatelessWidget {
                       // 첫 번째 줄: 학번 & 기수
                       Row(
                         children: [
-                          Expanded(child: _buildInfoBox("Student ID", studentId, Icons.badge_outlined)),
+                          Expanded(child: _buildInfoBox("학번", studentId, Icons.badge_outlined)),
                           const SizedBox(width: 12),
-                          Expanded(child: _buildInfoBox("Cohort", generation, Icons.school_outlined)),
+                          Expanded(child: _buildInfoBox("기수", generationString, Icons.school_outlined)),
                         ],
                       ),
                       const SizedBox(height: 12),
 
-                      // 두 번째 줄: 역할 (Manager / Member)
+                      // 두 번째 줄: 역할
                       _buildRoleBox(isManager, dept),
 
                       const SizedBox(height: 12),
 
-                      // 세 번째 줄: 이메일 (가로 전체)
-                      _buildInfoBox("Email Address", email, Icons.alternate_email_rounded, isFullWidth: true),
+                      // 세 번째 줄: 이메일
+                      _buildInfoBox("이메일", email, Icons.alternate_email_rounded, isFullWidth: true),
                     ],
                   ),
                 ),
 
-                const SizedBox(height: 24), // 하단 여백
+                const SizedBox(height: 24),
 
                 // [4. 닫기 버튼]
                 Padding(
@@ -423,7 +413,7 @@ class MemberProfileCard extends StatelessWidget {
                         side: BorderSide(color: Colors.white.withOpacity(0.2)),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: const Text("Close Profile", style: TextStyle(fontWeight: FontWeight.w600)),
+                      child: const Text("닫기", style: TextStyle(fontWeight: FontWeight.w600)),
                     ),
                   ),
                 ),
@@ -435,7 +425,6 @@ class MemberProfileCard extends StatelessWidget {
     );
   }
 
-  // 기본 정보 박스 위젯
   Widget _buildInfoBox(String label, String value, IconData icon, {bool isFullWidth = false}) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -476,7 +465,6 @@ class MemberProfileCard extends StatelessWidget {
     );
   }
 
-  // 역할(Role) 전용 박스 위젯
   Widget _buildRoleBox(bool isManager, Department dept) {
     return Container(
       width: double.infinity,
@@ -498,7 +486,7 @@ class MemberProfileCard extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(
-            isManager ? "EXECUTIVE / MANAGER" : "TEAM MEMBER",
+            isManager ? "운영진 / 매니저" : "일반 멤버",
             style: TextStyle(
               color: isManager ? dept.color : Colors.white70,
               fontSize: 13,

@@ -14,6 +14,7 @@ class ProfileScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: Colors.black,
       body: FutureBuilder<Map<String, dynamic>?>(
+        // Repository가 '*'를 select 한다면 cohort도 자동으로 가져옵니다.
         future: SupabaseRepository().getUserProfile(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -21,16 +22,19 @@ class ProfileScreen extends ConsumerWidget {
           }
 
           final user = snapshot.data;
-          // DB 필드 가져오기
+
+          // --- [데이터 가져오기 및 한글화 준비] ---
           final name = user?['name'] ?? 'Member';
-          final major = user?['major'] ?? 'Unknown';
-
-          // [추가] 새로 추가된 필드들
-          final school = user?['school'] ?? 'Univ';
-          final studentId = user?['student_id'] ?? 'ID';
+          final major = user?['major'] ?? '미입력';
+          final school = user?['school'] ?? '미입력';
+          final studentId = user?['student_id'] ?? '미입력';
           final gender = user?['gender'] ?? '-';
-          final role = user?['role'] ?? 'member'; // 'manager' or 'member'
 
+          // 기수 데이터 가져오기 (DB 컬럼: cohort)
+          final cohort = user?['cohort'];
+          final cohortString = cohort != null ? '${cohort}기' : '-';
+
+          final role = user?['role'] ?? 'member';
           final teamId = user?['team_id'] ?? 1;
           final dept = Department.values.firstWhere((d) => d.id == teamId, orElse: () => Department.business);
 
@@ -46,7 +50,7 @@ class ProfileScreen extends ConsumerWidget {
                     children: [
                       CircleAvatar(
                         radius: 40,
-                        backgroundColor: dept.color.withValues(alpha: 0.2),
+                        backgroundColor: dept.color.withOpacity(0.2), // withValues 대신 호환성 위해 withOpacity 사용
                         child: Icon(dept.icon, size: 40, color: dept.color),
                       ),
                       const SizedBox(width: 20),
@@ -61,7 +65,7 @@ class ProfileScreen extends ConsumerWidget {
                                 borderRadius: BorderRadius.circular(4)
                             ),
                             child: Text(
-                              role.toString().toUpperCase(), // MEMBER or MANAGER
+                              role == 'manager' ? '임원진' : '멤버', // 한글화
                               style: const TextStyle(color: Colors.black, fontSize: 12, fontWeight: FontWeight.bold),
                             ),
                           ),
@@ -71,38 +75,47 @@ class ProfileScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 40),
 
-                  // [2] 정보 타일들 (전화번호 제거됨, 학교/학번/성별 추가됨)
+                  // [2] 정보 타일들 (한글 라벨 적용)
                   Row(
                     children: [
-                      Expanded(child: _buildInfoTile("University", school)),
+                      Expanded(child: _buildInfoTile("대학", school)),
                       const SizedBox(width: 16),
-                      Expanded(child: _buildInfoTile("Student ID", studentId)),
-                    ],
-                  ),
-                  _buildInfoTile("Major", major),
-
-                  Row(
-                    children: [
-                      Expanded(child: _buildInfoTile("Gender", gender)),
-                      const SizedBox(width: 16),
-                      Expanded(child: _buildInfoTile("Department", dept.name, color: dept.color)),
+                      Expanded(child: _buildInfoTile("학번", studentId)),
                     ],
                   ),
 
-                  _buildInfoTile("Email", SupabaseRepository().currentUser?.email ?? ''),
+                  // [수정됨] 전공 옆에 기수 배치
+                  Row(
+                    children: [
+                      Expanded(child: _buildInfoTile("전공", major)),
+                      const SizedBox(width: 16),
+                      Expanded(child: _buildInfoTile("기수", cohortString, color: AppTheme.primaryColor)), // 기수는 강조 색상
+                    ],
+                  ),
+
+                  Row(
+                    children: [
+                      Expanded(child: _buildInfoTile("성별", gender)),
+                      const SizedBox(width: 16),
+                      // Department -> 부서 (enum name 대신 한글명 사용 추천, 일단 dept.name 유지)
+                      Expanded(child: _buildInfoTile("부서", dept.name, color: dept.color)),
+                    ],
+                  ),
+
+                  _buildInfoTile("이메일", SupabaseRepository().currentUser?.email ?? ''),
 
                   const Spacer(),
 
-                  // [3] MY ARCHIVE 버튼 (추가됨)
+                  // [3] MY ARCHIVE 버튼
                   SizedBox(
                     width: double.infinity,
                     height: 56,
                     child: OutlinedButton.icon(
-                      onPressed: () => context.push('/archive'), // 아카이브 화면으로 이동
+                      onPressed: () => context.push('/archive'),
                       icon: const Icon(Icons.folder_open_rounded),
-                      label: const Text("MY ARCHIVE", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      label: const Text("내 아카이브", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: dept.color, // 부서 색상 적용
+                        foregroundColor: dept.color,
                         side: BorderSide(color: dept.color, width: 2),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       ),
@@ -118,12 +131,12 @@ class ProfileScreen extends ConsumerWidget {
                     child: ElevatedButton(
                       onPressed: () => ref.read(authProvider.notifier).logout(),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.redAccent.withValues(alpha: 0.1),
+                        backgroundColor: Colors.redAccent.withOpacity(0.1),
                         foregroundColor: Colors.redAccent,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.5)),
+                        side: BorderSide(color: Colors.redAccent.withOpacity(0.5)),
                       ),
-                      child: const Text("LOGOUT", style: TextStyle(fontWeight: FontWeight.bold)),
+                      child: const Text("로그아웃", style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
                   const SizedBox(height: 80),
@@ -150,4 +163,9 @@ class ProfileScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+// AppTheme.primaryColor가 없다면 Colors.blue 등으로 대체하세요.
+class AppTheme {
+  static const primaryColor = Color(0xFF6C63FF);
 }
