@@ -2,17 +2,28 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseRepository {
+  // [중요] 이 변수(_client)를 모든 곳에서 사용해야 합니다.
   final SupabaseClient _client = Supabase.instance.client;
 
   User? get currentUser => _client.auth.currentUser;
 
   // --- Auth & Profile ---
   Future<String?> signIn({required String email, required String password}) async {
-    try { await _client.auth.signInWithPassword(email: email, password: password); return null; } catch (e) { return e.toString(); }
+    try {
+      await _client.auth.signInWithPassword(email: email, password: password);
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
   }
 
   Future<String?> signUp({required String email, required String password}) async {
-    try { await _client.auth.signUp(email: email, password: password); return null; } catch (e) { return e.toString(); }
+    try {
+      await _client.auth.signUp(email: email, password: password);
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
   }
 
   Future<Map<String, dynamic>?> getUserProfile() async {
@@ -21,7 +32,9 @@ class SupabaseRepository {
       if (userId == null) return null;
       // teams 테이블과 조인하여 소속 정보도 가져옴
       return await _client.from('users').select('*, teams(*)').eq('id', userId).maybeSingle();
-    } catch (e) { return null; }
+    } catch (e) {
+      return null;
+    }
   }
 
   Future<bool> updateUserProfile({
@@ -44,11 +57,16 @@ class SupabaseRepository {
       }
 
       await _client.from('users').upsert({
-        'id': user.id, 'email': user.email, 'name': name,
-        'major': major, 'phone': phone, 'team_id': teamId,
-        'school': school, 'student_id': studentId,
+        'id': user.id,
+        'email': user.email,
+        'name': name,
+        'major': major,
+        'phone': phone,
+        'team_id': teamId,
+        'school': school,
+        'student_id': studentId,
         'gender': gender,
-        'cohort': cohort, // 기수 저장
+        'cohort': cohort,
         'updated_at': DateTime.now().toIso8601String(),
       });
       return true;
@@ -86,7 +104,12 @@ class SupabaseRepository {
   }
 
   Future<bool> deleteCurriculum(int id) async {
-    try { await _client.from('curriculums').delete().eq('id', id); return true; } catch (e) { return false; }
+    try {
+      await _client.from('curriculums').delete().eq('id', id);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   // --- [개인 일정] Personal Schedules ---
@@ -121,18 +144,35 @@ class SupabaseRepository {
   }
 
   Future<bool> deletePersonalSchedule(int id) async {
-    try { await _client.from('personal_schedules').delete().eq('id', id); return true; } catch (e) { return false; }
+    try {
+      await _client.from('personal_schedules').delete().eq('id', id);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   // --- Notices ---
   Stream<List<Map<String, dynamic>>> getNoticesStream(int teamId) {
     return _client.from('notices').stream(primaryKey: ['id']).eq('team_id', teamId).order('created_at', ascending: false);
   }
+
   Future<bool> addNotice(String title, String content, int teamId) async {
-    try { await _client.from('notices').insert({'title': title, 'content': content, 'team_id': teamId}); return true; } catch (e) { return false; }
+    try {
+      await _client.from('notices').insert({'title': title, 'content': content, 'team_id': teamId});
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
+
   Future<bool> deleteNotice(int id) async {
-    try { await _client.from('notices').delete().eq('id', id); return true; } catch (e) { return false; }
+    try {
+      await _client.from('notices').delete().eq('id', id);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   // --- Archives ---
@@ -164,33 +204,35 @@ class SupabaseRepository {
     }
   }
 
-  // --- [Music Social Features] (수정됨: _supabase -> _client) ---
+  // --- [Music Social Features] ---
 
-  // 1. 댓글 가져오기
+  // 1. 댓글 작성 (client -> _client 수정됨)
+  Future<void> addComment(int songId, String content) async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw Exception("로그인이 필요합니다.");
+
+    await _client.from('comments').insert({
+      'song_id': songId,
+      'user_id': user.id,
+      'content': content,
+    });
+  }
+
+  // 2. 댓글 가져오기 (중복 제거 및 최적화, client -> _client 수정됨)
   Future<List<Map<String, dynamic>>> fetchComments(int songId) async {
     try {
-      final response = await _client // _supabase 대신 _client 사용
-          .from('song_comments')
-          .select('*, users(name, cohort, id)')
+      // 'comments_view'에서 긁어오기만 하면 됨
+      final response = await _client
+          .from('comments_view')
+          .select()
           .eq('song_id', songId)
           .order('created_at', ascending: false);
+
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       debugPrint("Fetch Comments Error: $e");
       return [];
     }
-  }
-
-  // 2. 댓글 작성
-  Future<void> addComment(int songId, String content) async {
-    final userId = _client.auth.currentUser?.id;
-    if (userId == null) return;
-
-    await _client.from('song_comments').insert({
-      'song_id': songId,
-      'user_id': userId,
-      'content': content,
-    });
   }
 
   // 3. 좋아요 상태 확인
@@ -223,7 +265,7 @@ class SupabaseRepository {
           .delete()
           .eq('user_id', userId)
           .eq('song_id', songId);
-      return false; // 취소됨
+      return false; // 좋아요 취소됨
     } else {
       await _client.from('song_likes').insert({
         'user_id': userId,
@@ -261,16 +303,26 @@ class SupabaseRepository {
     try {
       final userId = _client.auth.currentUser?.id;
       if (userId == null) return [];
-      final response = await _client.from('assignments').select('*, curriculums(title)').eq('user_id', userId).order('created_at', ascending: false);
+      final response = await _client
+          .from('assignments')
+          .select('*, curriculums(title)')
+          .eq('user_id', userId)
+          .order('created_at', ascending: false);
       return List<Map<String, dynamic>>.from(response);
-    } catch (e) { return []; }
+    } catch (e) {
+      return [];
+    }
   }
 
-  Future<bool> uploadAssignment(int curriculumId) async { return false; }
+  Future<bool> uploadAssignment(int curriculumId) async {
+    return false;
+  }
 
   Future<bool> markAttendance(String qrData) async {
     return true;
   }
 
-  Future<List<Map<String, dynamic>>> getTracks(int teamId) async { return []; }
+  Future<List<Map<String, dynamic>>> getTracks(int teamId) async {
+    return [];
+  }
 }

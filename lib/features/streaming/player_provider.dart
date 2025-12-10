@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 
-// 현재 재생 중인 곡 (재생 중이 아니면 null)
+// 현재 재생 중인 곡 상태 관리
 class CurrentSongNotifier extends StateNotifier<MediaItem?> {
   CurrentSongNotifier() : super(null);
   void setSong(MediaItem song) => state = song;
@@ -12,5 +12,5 @@ final currentSongProvider = StateNotifierProvider<CurrentSongNotifier, MediaItem
   return CurrentSongNotifier();
 });
 
-// [핵심] 플레이어가 전체 화면으로 확장되었는지 여부 (true: 전체화면, false: 미니플레이어)
+// [핵심 상태] 플레이어가 전체 화면인지(true), 미니 모드인지(false)
 final isPlayerExpandedProvider = StateProvider<bool>((ref) => false);
