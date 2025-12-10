@@ -1,29 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 import '../../common/widgets/glass_card.dart';
-import 'stream_screen.dart'; // StreamScreen import 필수
+import 'stream_screen.dart';
 
 class MiniPlayer extends StatelessWidget {
-  final MediaItem song; // 부모에게서 받은 곡 정보
+  final MediaItem song;
 
   const MiniPlayer({super.key, required this.song});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      // [핵심] 탭하면 전체 화면 플레이어로 전환 (네비게이션 바 덮음)
       onTap: () {
+        // [UX 핵심] Root Navigator를 사용하여 탭바 위로 페이지를 띄움
         Navigator.of(context, rootNavigator: true).push(
           PageRouteBuilder(
             pageBuilder: (context, animation, __) => StreamScreen(mediaItem: song),
             transitionsBuilder: (context, animation, __, child) {
-              // 아래에서 위로 올라오는 애니메이션
-              return SlideTransition(
-                position: Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
-                    .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutQuart)),
-                child: child,
-              );
+              // 유튜브 뮤직처럼 아래에서 위로 올라오는 슬라이드 애니메이션
+              const begin = Offset(0.0, 1.0);
+              const end = Offset.zero;
+              const curve = Curves.fastOutSlowIn;
+              var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+              return SlideTransition(position: animation.drive(tween), child: child);
             },
+            opaque: false, // 배경이 투명하게 보일 수 있도록 (필요시)
           ),
         );
       },
@@ -33,9 +34,9 @@ class MiniPlayer extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
-              // 1. 앨범 아트
+              // 1. 앨범 아트 (Hero 애니메이션 연결)
               Hero(
-                tag: 'albumArt_${song.id}', // Hero 애니메이션 연결
+                tag: 'albumArt_${song.id}',
                 child: Container(
                   width: 42, height: 42,
                   decoration: BoxDecoration(
@@ -49,19 +50,22 @@ class MiniPlayer extends StatelessWidget {
               ),
               const SizedBox(width: 12),
 
-              // 2. 곡 제목 & 가수
+              // 2. 제목 및 가수
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(song.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13), maxLines: 1),
-                    Text(song.artist ?? '', style: const TextStyle(color: Colors.white60, fontSize: 11), maxLines: 1),
+                    Text(song.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(song.artist ?? '', style: const TextStyle(color: Colors.white60, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),
 
-              // 3. Play/Pause 버튼 (지금은 UI만)
-              const Icon(Icons.pause_rounded, color: Colors.white),
+              // 3. 컨트롤 버튼 (디자인용)
+              const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 28),
+              const SizedBox(width: 8),
+              const Icon(Icons.skip_next_rounded, color: Colors.white, size: 28),
             ],
           ),
         ),

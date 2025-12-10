@@ -1,7 +1,8 @@
+// (Imports 부분 생략 - 위와 동일)
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:just_audio_background/just_audio_background.dart'; // MediaItem
+import 'package:just_audio_background/just_audio_background.dart';
 
 import '../../common/layout/main_shell.dart';
 import '../../features/auth/auth_provider.dart';
@@ -10,8 +11,9 @@ import '../../features/auth/onboarding_screen.dart';
 import '../../features/home/home_screen.dart';
 import '../../features/curriculum/curriculum_list_screen.dart';
 import '../../features/curriculum/assignment_upload_screen.dart';
-import '../../features/curriculum/curriculum_provider.dart'; // [중요] CalendarEvent가 정의된 파일 import
+import '../../features/curriculum/curriculum_provider.dart';
 import '../../features/streaming/stream_screen.dart';
+import '../../features/streaming/player_provider.dart'; // [추가] Provider 필요
 import '../../features/splash/splash_screen.dart';
 import '../../features/admin/qr_create_screen.dart';
 import '../../features/attendance/attendance_scan_screen.dart';
@@ -30,7 +32,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/splash',
     debugLogDiagnostics: true,
     refreshListenable: authStateListenable,
-
+    // (redirect 로직은 그대로 유지)
     redirect: (context, state) {
       final status = ref.read(authProvider);
       final goingTo = state.uri.toString();
@@ -59,13 +61,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/qr_create', builder: (context, state) => const QrCreateScreen()),
       GoRoute(path: '/attendance_scan', builder: (context, state) => const AttendanceScanScreen()),
 
-      // [수정 완료] assignment_upload 라우트 에러 해결
       GoRoute(
         path: '/assignment_upload',
         builder: (context, state) {
-          // state.extra는 Object? 타입이므로 as CalendarEvent로 형변환이 필요합니다.
-          // 만약 extra가 null이거나 다른 타입이면 에러가 날 수 있으니 주의해야 하지만,
-          // 로직상 항상 CalendarEvent를 넘겨준다고 가정합니다.
           final item = state.extra as CalendarEvent;
           return AssignmentUploadScreen(item: item);
         },
@@ -80,16 +78,23 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/upcoming', pageBuilder: (context, state) => NoTransitionPage(child: const CurriculumListScreen())),
           GoRoute(path: '/team_members', pageBuilder: (context, state) => NoTransitionPage(child: const TeamMemberScreen())),
 
-          // StreamScreen 연결
+          // [핵심 수정] 탭 클릭 시 현재 재생 중인 노래 유지
           GoRoute(
               path: '/stream',
               pageBuilder: (context, state) {
-                // 안전하게 MediaItem으로 캐스팅 (데이터가 없으면 더미 데이터 사용)
                 MediaItem mediaItem;
+                // 1. 다른 화면에서 넘겨준 곡이 있으면 그걸 씀
                 if (state.extra is MediaItem) {
                   mediaItem = state.extra as MediaItem;
                 } else {
-                  mediaItem = const MediaItem(id: '0', title: 'Unknown Track', artist: 'Unknown Artist');
+                  // 2. 없으면(탭 클릭 시) 현재 재생 중인 곡을 가져옴
+                  final currentSong = ref.read(currentSongProvider);
+                  if (currentSong != null) {
+                    mediaItem = currentSong;
+                  } else {
+                    // 3. 재생 중인 것도 없으면 더미 데이터 or 빈 상태
+                    mediaItem = const MediaItem(id: '0', title: '재생 중인 곡 없음', artist: 'KRAFT Music');
+                  }
                 }
                 return NoTransitionPage(child: StreamScreen(mediaItem: mediaItem));
               }

@@ -8,21 +8,16 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../core/data/supabase_repository.dart';
 import 'audio_service.dart';
+import 'player_provider.dart';
 
-// -----------------------------------------------------------------------------
-// Providers
-// -----------------------------------------------------------------------------
+// 댓글 Provider
 final commentsProvider = FutureProvider.family.autoDispose<List<Map<String, dynamic>>, String>((ref, songId) {
   final id = int.tryParse(songId) ?? 0;
   return SupabaseRepository().fetchComments(id);
 });
 
-// -----------------------------------------------------------------------------
-// UI Screen
-// -----------------------------------------------------------------------------
 class StreamScreen extends ConsumerStatefulWidget {
   final MediaItem mediaItem;
-
   const StreamScreen({super.key, required this.mediaItem});
 
   @override
@@ -35,33 +30,30 @@ class _StreamScreenState extends ConsumerState<StreamScreen> with TickerProvider
   final _repo = SupabaseRepository();
 
   bool _isLiked = false;
-  late AnimationController _playPauseController;
 
   @override
   void initState() {
     super.initState();
-    _playPauseController = AnimationController(vsync: this, duration: const Duration(milliseconds: 300));
     _loadLikeStatus();
-    // 필요 시 자동 재생
-    // KraftAudioService.playUrl(widget.mediaItem.id, tag: widget.mediaItem);
   }
 
   @override
   void dispose() {
     _commentController.dispose();
     _sheetController.dispose();
-    _playPauseController.dispose();
     super.dispose();
   }
 
   void _loadLikeStatus() async {
     final songId = int.tryParse(widget.mediaItem.id) ?? 0;
+    if (songId == 0) return;
     final liked = await _repo.isSongLiked(songId);
     if (mounted) setState(() => _isLiked = liked);
   }
 
   Future<void> _toggleLike() async {
     final songId = int.tryParse(widget.mediaItem.id) ?? 0;
+    if (songId == 0) return;
     setState(() => _isLiked = !_isLiked);
     await _repo.toggleSongLike(songId);
   }
@@ -72,168 +64,129 @@ class _StreamScreenState extends ConsumerState<StreamScreen> with TickerProvider
 
     final songId = int.tryParse(widget.mediaItem.id) ?? 0;
     _commentController.clear();
-    FocusScope.of(context).unfocus(); // 키보드 닫기
+    FocusScope.of(context).unfocus(); // 키보드 내리기
 
-    await _repo.addComment(songId, content);
-    ref.invalidate(commentsProvider(widget.mediaItem.id));
+    try {
+      await _repo.addComment(songId, content);
+      ref.invalidate(commentsProvider(widget.mediaItem.id));
+    } catch (e) {
+      debugPrint("Error posting comment: $e");
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // 키보드 높이 감지
+    // 키보드 높이
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    // 화면 전체 높이
+    final screenHeight = MediaQuery.of(context).size.height;
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      // 중요: 키보드가 올라와도 메인 UI(앨범아트 등)가 찌그러지지 않게 함
-      resizeToAvoidBottomInset: false,
-      body: Stack(
+    return Material(
+      color: Colors.black,
+      child: Stack(
         children: [
-          // 1. 배경 레이어 (이미지 + 블러 + 그라데이션)
-          _buildCinematicBackground(),
+          // 1. 배경 (Blur)
+          Positioned.fill(
+            child: widget.mediaItem.artUri != null
+                ? Image.network(widget.mediaItem.artUri.toString(), fit: BoxFit.cover)
+                : Container(color: const Color(0xFF111111)),
+          ),
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+              child: Container(color: Colors.black.withOpacity(0.6)),
+            ),
+          ),
 
-          // 2. 메인 플레이어 컨텐츠 (Safe Area 안에서 스크롤 가능하게 하여 오버플로우 완전 방지)
-          SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return SingleChildScrollView(
-                  physics: const ClampingScrollPhysics(),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        children: [
-                          _buildTopBar(context),
-                          // 화면 크기에 따라 여백 유동적 조절
-                          SizedBox(height: constraints.maxHeight * 0.05),
-                          _buildAlbumArt(),
-                          SizedBox(height: constraints.maxHeight * 0.05),
-                          _buildSongInfo(),
-                          const SizedBox(height: 30),
-                          _buildProgressBar(),
-                          const SizedBox(height: 10),
-                          _buildControls(),
-                          // 하단 시트가 올라와도 내용이 보이도록 하단 여백 확보
-                          const SizedBox(height: 140),
-                        ],
+          // 2. 메인 컨텐츠 (핵심 수정: LayoutBuilder + SingleChildScrollView)
+          // 이 구조가 오버플로우를 막아줍니다.
+          Positioned.fill(
+            bottom: 80, // 하단 댓글 시트가 살짝 보일 공간 확보
+            child: SafeArea(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    // 내용이 적어도 화면 꽉 차게, 내용이 많으면 스크롤되게
+                    physics: const BouncingScrollPhysics(),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly, // 공간 배분
+                          children: [
+                            _buildTopBar(context),
+                            // 화면이 작을땐 간격을 줄이도록 유동적으로 처리
+                            SizedBox(height: screenHeight * 0.02),
+                            _buildAlbumArt(screenHeight),
+                            SizedBox(height: screenHeight * 0.03),
+                            _buildSongInfo(),
+                            const SizedBox(height: 20),
+                            _buildProgressBar(),
+                            const SizedBox(height: 10),
+                            _buildControls(),
+                            const SizedBox(height: 20),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                );
-              },
-            ),
-          ),
-
-          // 3. 드래그 가능한 댓글 시트 (키보드 패딩 처리 포함)
-          _buildGlassBottomSheet(bottomInset),
-        ],
-      ),
-    );
-  }
-
-  // --- 🎨 Design Widgets ---
-
-  Widget _buildCinematicBackground() {
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: widget.mediaItem.artUri != null
-              ? Image.network(
-            widget.mediaItem.artUri.toString(),
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(color: const Color(0xFF111111)),
-          )
-              : Container(color: const Color(0xFF111111)),
-        ),
-        // 강력한 블러 (Glass effect)
-        Positioned.fill(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
-            child: Container(
-              color: Colors.black.withOpacity(0.6), // 배경 어둡게 눌러주기
-            ),
-          ),
-        ),
-        // 상하단 그라데이션 (텍스트 가독성 확보)
-        Positioned.fill(
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.black.withOpacity(0.6),
-                  Colors.transparent,
-                  Colors.black.withOpacity(0.9),
-                ],
-                stops: const [0.0, 0.5, 1.0],
+                  );
+                },
               ),
             ),
           ),
-        ),
-      ],
+
+          // 3. 댓글 시트
+          _buildCommentsSheet(bottomInset),
+        ],
+      ),
     );
   }
 
   Widget _buildTopBar(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 16, bottom: 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white, size: 32),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-          Column(
-            children: [
-              Text(
-                "PLAYING FROM PLAYLIST",
-                style: GoogleFonts.roboto(
-                    color: Colors.white60, fontSize: 10, letterSpacing: 1.5, fontWeight: FontWeight.w500
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                "Kraft Weekly",
-                style: GoogleFonts.notoSans(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          IconButton(
-            icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
-            onPressed: () {},
-          ),
-        ],
-      ),
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white, size: 32),
+          onPressed: () {
+            ref.read(isPlayerExpandedProvider.notifier).state = false;
+          },
+        ),
+        Column(
+          children: [
+            Text("PLAYING FROM PLAYLIST", style: GoogleFonts.roboto(color: Colors.white60, fontSize: 10, letterSpacing: 1.5)),
+            const SizedBox(height: 4),
+            Text("Kraft Weekly", style: GoogleFonts.notoSans(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        IconButton(icon: const Icon(Icons.more_vert, color: Colors.white), onPressed: () {}),
+      ],
     );
   }
 
-  Widget _buildAlbumArt() {
-    return Hero(
-      tag: 'albumArt_${widget.mediaItem.id}',
-      child: Container(
-        width: double.infinity,
-        // 화면 너비에 맞춰 1:1 비율 유지하되 최대 크기 제한
-        constraints: const BoxConstraints(maxWidth: 350, maxHeight: 350, minHeight: 250),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12), // 둥근 모서리 약간 줄임 (세련됨)
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.5),
-              blurRadius: 40,
-              offset: const Offset(0, 20),
-              spreadRadius: -10,
-            )
-          ],
-          image: widget.mediaItem.artUri != null
-              ? DecorationImage(
-            image: NetworkImage(widget.mediaItem.artUri.toString()),
-            fit: BoxFit.cover,
-          )
-              : null,
+  Widget _buildAlbumArt(double screenHeight) {
+    // 화면 높이에 따라 앨범 아트 크기 조절 (최대 350, 최소 200)
+    double artSize = screenHeight * 0.4;
+    if (artSize > 350) artSize = 350;
+    if (artSize < 200) artSize = 200;
+
+    return SizedBox(
+      height: artSize,
+      width: artSize, // 정사각형 유지
+      child: Hero(
+        tag: 'albumArt_${widget.mediaItem.id}',
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 20, offset: const Offset(0, 10))],
+            image: widget.mediaItem.artUri != null
+                ? DecorationImage(image: NetworkImage(widget.mediaItem.artUri.toString()), fit: BoxFit.cover)
+                : null,
+            color: Colors.grey[900],
+          ),
         ),
       ),
     );
@@ -242,7 +195,6 @@ class _StreamScreenState extends ConsumerState<StreamScreen> with TickerProvider
   Widget _buildSongInfo() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Expanded(
           child: Column(
@@ -250,33 +202,28 @@ class _StreamScreenState extends ConsumerState<StreamScreen> with TickerProvider
             children: [
               Text(
                 widget.mediaItem.title,
-                style: GoogleFonts.notoSans(
-                    color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800, height: 1.2
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.notoSans(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 6),
               Text(
-                widget.mediaItem.artist ?? "Unknown Artist",
-                style: GoogleFonts.notoSans(
-                    color: Colors.white70, fontSize: 18, fontWeight: FontWeight.w400
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                widget.mediaItem.artist ?? "Unknown",
+                style: GoogleFonts.notoSans(color: Colors.white70, fontSize: 18),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
         ),
-        const SizedBox(width: 16),
         GestureDetector(
           onTap: _toggleLike,
-          child: Icon(
-            _isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-            color: _isLiked ? const Color(0xFF1ED760) : Colors.white, // 스포티파이 그린 or 핫핑크 선택 가능
-            size: 32,
-          ).animate(target: _isLiked ? 1 : 0)
-              .scale(begin: const Offset(1, 1), end: const Offset(1.2, 1.2), curve: Curves.elasticOut),
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Icon(
+              _isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+              color: _isLiked ? const Color(0xFF1ED760) : Colors.white,
+              size: 32,
+            ).animate(target: _isLiked ? 1 : 0).scale(begin: const Offset(1, 1), end: const Offset(1.2, 1.2), curve: Curves.elasticOut),
+          ),
         ),
       ],
     );
@@ -293,34 +240,36 @@ class _StreamScreenState extends ConsumerState<StreamScreen> with TickerProvider
             var position = snapshot.data ?? Duration.zero;
             if (position > duration) position = duration;
 
+            // Slider 대체 구현 (심플 버전)
             return Column(
               children: [
-                SliderTheme(
-                  data: SliderThemeData(
-                    trackHeight: 2,
-                    activeTrackColor: Colors.white,
-                    inactiveTrackColor: Colors.white24,
-                    thumbColor: Colors.white,
-                    overlayColor: Colors.white.withOpacity(0.2),
-                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                    trackShape: const RoundedRectSliderTrackShape(),
-                  ),
-                  child: Slider(
-                    value: position.inMilliseconds.toDouble(),
-                    max: duration.inMilliseconds.toDouble() > 0 ? duration.inMilliseconds.toDouble() : 1.0,
-                    onChanged: (value) {
-                      KraftAudioService.seek(Duration(milliseconds: value.toInt()));
-                    },
+                SizedBox(
+                  height: 20,
+                  child: SliderTheme(
+                    data: SliderThemeData(
+                      trackHeight: 4,
+                      activeTrackColor: Colors.white,
+                      inactiveTrackColor: Colors.white24,
+                      thumbColor: Colors.white,
+                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                    ),
+                    child: Slider(
+                      value: position.inMilliseconds.toDouble(),
+                      max: duration.inMilliseconds.toDouble() > 0 ? duration.inMilliseconds.toDouble() : 1.0,
+                      onChanged: (val) {
+                        KraftAudioService.seek(Duration(milliseconds: val.toInt()));
+                      },
+                    ),
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(_formatDuration(position), style: GoogleFonts.roboto(color: Colors.white54, fontSize: 12)),
-                      Text(_formatDuration(duration), style: GoogleFonts.roboto(color: Colors.white54, fontSize: 12)),
+                      Text(_formatDuration(position), style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                      Text(_formatDuration(duration), style: const TextStyle(color: Colors.white54, fontSize: 12)),
                     ],
                   ),
                 ),
@@ -336,238 +285,136 @@ class _StreamScreenState extends ConsumerState<StreamScreen> with TickerProvider
     return StreamBuilder<PlayerState>(
       stream: KraftAudioService.playerStateStream,
       builder: (context, snapshot) {
-        final playerState = snapshot.data;
-        final playing = playerState?.playing;
-        final processingState = playerState?.processingState;
-        final isPlaying = playing == true && processingState != ProcessingState.completed;
-
-        if (isPlaying) {
-          _playPauseController.forward();
-        } else {
-          _playPauseController.reverse();
-        }
-
+        final playing = snapshot.data?.playing ?? false;
         return Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            IconButton(
-              icon: const Icon(Icons.shuffle, color: Colors.white, size: 24),
-              onPressed: () {},
-            ),
-            IconButton(
-              icon: const Icon(Icons.skip_previous_rounded, color: Colors.white, size: 48),
-              onPressed: () {},
-            ),
+            IconButton(icon: const Icon(Icons.shuffle, color: Colors.white), onPressed: () {}),
+            IconButton(icon: const Icon(Icons.skip_previous_rounded, color: Colors.white, size: 42), onPressed: () {}),
             GestureDetector(
-              onTap: isPlaying ? KraftAudioService.pause : KraftAudioService.resume,
+              onTap: playing ? KraftAudioService.pause : KraftAudioService.resume,
               child: Container(
-                width: 72, height: 72,
-                decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white,
-                    boxShadow: [
-                      BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 5))
-                    ]
-                ),
-                child: Center(
-                  child: AnimatedIcon(
-                    icon: AnimatedIcons.play_pause,
-                    progress: _playPauseController,
-                    color: Colors.black,
-                    size: 36,
-                  ),
-                ),
+                padding: const EdgeInsets.all(16),
+                decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
+                child: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.black, size: 32),
               ),
             ),
-            IconButton(
-              icon: const Icon(Icons.skip_next_rounded, color: Colors.white, size: 48),
-              onPressed: () {},
-            ),
-            IconButton(
-              icon: const Icon(Icons.repeat, color: Colors.white, size: 24),
-              onPressed: () {},
-            ),
+            IconButton(icon: const Icon(Icons.skip_next_rounded, color: Colors.white, size: 42), onPressed: () {}),
+            IconButton(icon: const Icon(Icons.repeat, color: Colors.white), onPressed: () {}),
           ],
         );
       },
     );
   }
 
-  // --- 🔥 핵심 Fix: Glassmorphism Bottom Sheet ---
-
-  Widget _buildGlassBottomSheet(double bottomInset) {
+  Widget _buildCommentsSheet(double bottomInset) {
     return DraggableScrollableSheet(
       controller: _sheetController,
-      // 하단 12%만 빼꼼 보이게 시작
       initialChildSize: 0.12,
       minChildSize: 0.12,
-      maxChildSize: 0.92,
+      maxChildSize: 0.85,
       snap: true,
-      builder: (BuildContext context, ScrollController scrollController) {
-        return ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF121212).withOpacity(0.85), // 진한 반투명 검정
-                border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
-              ),
-              child: Column(
-                children: [
-                  // --- Drag Handle ---
-                  SingleChildScrollView(
-                    controller: scrollController,
-                    physics: const ClampingScrollPhysics(),
-                    child: Center(
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 12),
-                          Container(
-                            width: 32, height: 4,
-                            decoration: BoxDecoration(color: Colors.white30, borderRadius: BorderRadius.circular(2)),
-                          ),
-                          const SizedBox(height: 16),
-                          Text("COMMENTS", style: GoogleFonts.notoSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                          const SizedBox(height: 16),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // --- Comment List ---
-                  Expanded(
-                    child: _buildCommentsList(scrollController),
-                  ),
-
-                  // --- Input Field (키보드 패딩 적용) ---
-                  _buildInputArea(bottomInset),
-                ],
-              ),
-            ),
+      builder: (context, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E1E1E).withOpacity(0.95),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.4), blurRadius: 10, offset: const Offset(0, -4))],
           ),
-        );
-      },
-    );
-  }
-
-  Widget _buildCommentsList(ScrollController scrollController) {
-    return Consumer(
-      builder: (context, ref, _) {
-        final commentsAsync = ref.watch(commentsProvider(widget.mediaItem.id));
-
-        return commentsAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white30)),
-          error: (e, s) => const Center(child: Text("댓글 로딩 실패", style: TextStyle(color: Colors.white38))),
-          data: (comments) {
-            if (comments.isEmpty) {
-              return Center(child: Text("가장 먼저 댓글을 남겨보세요.", style: GoogleFonts.notoSans(color: Colors.white38)));
-            }
-            return ListView.separated(
-              controller: scrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              itemCount: comments.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 24),
-              itemBuilder: (context, index) {
-                final c = comments[index];
-                final user = c['users'] ?? {};
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          child: Column(
+            children: [
+              SingleChildScrollView(
+                controller: scrollController,
+                physics: const ClampingScrollPhysics(),
+                child: Column(
                   children: [
-                    CircleAvatar(
-                      radius: 16,
-                      backgroundColor: Colors.white12,
-                      backgroundImage: user['avatar_url'] != null ? NetworkImage(user['avatar_url']) : null,
-                      child: user['avatar_url'] == null
-                          ? Text((user['name'] ?? "?")[0], style: const TextStyle(color: Colors.white, fontSize: 12))
-                          : null,
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(user['name'] ?? "Unknown", style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
-                              const SizedBox(width: 8),
-                              if (user['cohort'] != null)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                  decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(4)),
-                                  child: Text("${user['cohort']}기", style: const TextStyle(color: Colors.white, fontSize: 10)),
-                                )
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(c['content'] ?? "", style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.4)),
-                        ],
-                      ),
-                    ),
+                    const SizedBox(height: 12),
+                    Container(width: 32, height: 4, decoration: BoxDecoration(color: Colors.white30, borderRadius: BorderRadius.circular(2))),
+                    const SizedBox(height: 16),
+                    Text("COMMENTS", style: GoogleFonts.notoSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                    const SizedBox(height: 16),
                   ],
-                );
-              },
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildInputArea(double bottomInset) {
-    return Container(
-      // 🌟 핵심: 키보드가 올라오면 padding bottom을 키워 입력창을 위로 밀어올림
-      padding: EdgeInsets.only(
-          left: 16, right: 16, top: 12,
-          bottom: bottomInset > 0 ? bottomInset + 12 : 32
-      ),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E),
-        border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              height: 42,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(21),
-              ),
-              child: TextField(
-                controller: _commentController,
-                style: const TextStyle(color: Colors.white, fontSize: 14),
-                cursorColor: Colors.white,
-                decoration: const InputDecoration(
-                  hintText: "댓글 입력...",
-                  hintStyle: TextStyle(color: Colors.white38, fontSize: 14),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-                  isDense: true,
                 ),
               ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          GestureDetector(
-            onTap: _submitComment,
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white,
+
+              Expanded(
+                child: Consumer(
+                  builder: (context, ref, _) {
+                    final comments = ref.watch(commentsProvider(widget.mediaItem.id));
+                    return comments.when(
+                      data: (data) => data.isEmpty
+                          ? const Center(child: Text("No comments yet.", style: TextStyle(color: Colors.white54)))
+                          : ListView.separated(
+                        controller: scrollController,
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        itemCount: data.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 16),
+                        itemBuilder: (context, index) {
+                          final c = data[index];
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              CircleAvatar(radius: 14, backgroundColor: Colors.grey[800], child: Text((c['users']?['name']??"?")[0], style: const TextStyle(color: Colors.white, fontSize: 12))),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(c['users']?['name'] ?? "Unknown", style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                    const SizedBox(height: 2),
+                                    Text(c['content'] ?? "", style: const TextStyle(color: Colors.white, fontSize: 14)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                      loading: () => const Center(child: CircularProgressIndicator(color: Colors.white)),
+                      error: (_, __) => const SizedBox(),
+                    );
+                  },
+                ),
               ),
-              child: const Icon(Icons.arrow_upward_rounded, color: Colors.black, size: 20),
-            ),
+
+              // 키보드 대응 입력창
+              Container(
+                padding: EdgeInsets.only(left: 16, right: 16, top: 12, bottom: bottomInset > 0 ? bottomInset + 12 : 32),
+                decoration: const BoxDecoration(border: Border(top: BorderSide(color: Colors.white12)), color: Color(0xFF1E1E1E)),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        height: 40,
+                        decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(20)),
+                        child: TextField(
+                          controller: _commentController,
+                          style: const TextStyle(color: Colors.white),
+                          cursorColor: Colors.white,
+                          decoration: const InputDecoration(
+                            hintText: "Add a comment...",
+                            hintStyle: TextStyle(color: Colors.white38, fontSize: 14),
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(icon: const Icon(Icons.send_rounded, color: Colors.white), onPressed: _submitComment),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
   String _formatDuration(Duration d) {
-    final minutes = d.inMinutes.remainder(60).toString().padLeft(1, '0');
-    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return "$minutes:$seconds";
+    final m = d.inMinutes.remainder(60).toString().padLeft(1, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return "$m:$s";
   }
 }
