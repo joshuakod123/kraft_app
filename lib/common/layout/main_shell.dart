@@ -26,13 +26,13 @@ class _MainShellState extends ConsumerState<MainShell> {
     final currentSong = ref.watch(currentSongProvider);
     final isExpanded = ref.watch(isPlayerExpandedProvider);
 
-    // 수치 상수
+    // 수치 상수 정의
     const double navBarHeight = 80.0;
     const double miniPlayerHeight = 68.0;
     const double miniPlayerMargin = 12.0;
 
     return PopScope(
-      // 플레이어가 확장된 상태라면 앱 종료를 막고 플레이어를 닫음
+      // 플레이어가 확장된 상태라면 뒤로가기 시 앱 종료 대신 플레이어 축소
       canPop: !isExpanded,
       onPopInvoked: (didPop) {
         if (didPop) return;
@@ -42,13 +42,13 @@ class _MainShellState extends ConsumerState<MainShell> {
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-        // [중요] 키보드가 올라와도 배경화면이 찌그러지지 않도록 false 설정
+        // [핵심] 키보드가 올라와도 배경 UI가 찌그러지지 않도록 설정
         resizeToAvoidBottomInset: false,
         body: Stack(
           children: [
-            // 1. 메인 앱 화면 (탭에 따라 바뀌는 부분)
+            // 1. 메인 앱 화면 (탭 내용)
             Positioned.fill(
-              bottom: navBarHeight, // 네비게이션 바 공간 확보
+              bottom: navBarHeight,
               child: widget.child,
             ),
 
@@ -61,13 +61,12 @@ class _MainShellState extends ConsumerState<MainShell> {
               child: _buildGlassNavBar(context, currentIndex),
             ),
 
-            // 3. 뮤직 플레이어 오버레이 (핵심)
-            // 페이지 이동이 아니라, 위치와 크기만 애니메이션으로 변경
+            // 3. 뮤직 플레이어 오버레이 (Seamless Playback의 핵심)
             if (currentSong != null)
               AnimatedPositioned(
                 duration: const Duration(milliseconds: 350),
                 curve: Curves.fastOutSlowIn,
-                // 확장되면 화면 전체(0,0,0,0), 아니면 미니 플레이어 위치
+                // 확장되면 화면 전체, 아니면 네비게이션 바 위 미니 플레이어 위치
                 top: isExpanded ? 0 : MediaQuery.of(context).size.height - navBarHeight - miniPlayerHeight - miniPlayerMargin,
                 bottom: isExpanded ? 0 : navBarHeight + miniPlayerMargin,
                 left: isExpanded ? 0 : miniPlayerMargin,
@@ -82,10 +81,10 @@ class _MainShellState extends ConsumerState<MainShell> {
                   // 드래그 제스처로 닫기/열기
                   onVerticalDragEnd: (details) {
                     if (isExpanded && details.primaryVelocity! > 500) {
-                      // 아래로 빠르게 스와이프 -> 닫기
+                      // 아래로 빠르게 스와이프 -> 축소
                       ref.read(isPlayerExpandedProvider.notifier).state = false;
                     } else if (!isExpanded && details.primaryVelocity! < -500) {
-                      // 위로 빠르게 스와이프 -> 열기
+                      // 위로 빠르게 스와이프 -> 확장
                       ref.read(isPlayerExpandedProvider.notifier).state = true;
                     }
                   },
@@ -102,9 +101,8 @@ class _MainShellState extends ConsumerState<MainShell> {
                     clipBehavior: Clip.antiAlias,
                     child: AnimatedSwitcher(
                       duration: const Duration(milliseconds: 200),
-                      // 상태에 따라 다른 위젯 보여주기
                       child: isExpanded
-                          ? StreamScreen(mediaItem: currentSong) // 전체 화면 플레이어
+                          ? StreamScreen(mediaItem: currentSong) // 전체 화면
                           : MiniPlayer(song: currentSong),       // 미니 플레이어
                     ),
                   ),
@@ -136,7 +134,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           _NavBarIcon(icon: Icons.home_rounded, index: 0, currentIndex: currentIndex, path: '/home'),
           _NavBarIcon(icon: Icons.calendar_month_rounded, index: 1, currentIndex: currentIndex, path: '/upcoming'),
           _NavBarIcon(icon: Icons.groups_3_rounded, index: 2, currentIndex: currentIndex, path: '/team_members'),
-          // 재생 버튼 탭 시 동작: 페이지 이동 X -> 플레이어 확장 O
+          // 스트림 탭 클릭 시: 페이지 이동 대신 플레이어 확장 로직 수행
           _NavBarIcon(icon: Icons.play_circle_outline_rounded, index: 3, currentIndex: currentIndex, path: '/stream'),
           _NavBarIcon(icon: Icons.person_outline_rounded, index: 4, currentIndex: currentIndex, path: '/profile'),
         ],
@@ -160,14 +158,13 @@ class _NavBarIcon extends ConsumerWidget {
 
     return GestureDetector(
       onTap: () {
-        // 3번(Stream) 탭을 눌렀을 때
         if (index == 3) {
           final currentSong = ref.read(currentSongProvider);
           if (currentSong != null) {
-            // 이미 재생 중인 곡이 있으면 확장만 함
+            // 이미 재생 중이면 플레이어 확장
             ref.read(isPlayerExpandedProvider.notifier).state = true;
           } else {
-            // 재생 중인 곡이 없으면 페이지 이동 (혹은 아무 동작 안함)
+            // 재생 중이 아니면 페이지 이동
             context.go(path);
           }
           return;

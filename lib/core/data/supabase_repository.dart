@@ -6,6 +6,8 @@ class SupabaseRepository {
   final SupabaseClient _client = Supabase.instance.client;
 
   User? get currentUser => _client.auth.currentUser;
+  // [New] 현재 로그인한 유저의 ID Getter
+  String? get currentUserId => _client.auth.currentUser?.id;
 
   // --- Auth & Profile ---
   Future<String?> signIn({required String email, required String password}) async {
@@ -30,7 +32,6 @@ class SupabaseRepository {
     try {
       final userId = _client.auth.currentUser?.id;
       if (userId == null) return null;
-      // teams 테이블과 조인하여 소속 정보도 가져옴
       return await _client.from('users').select('*, teams(*)').eq('id', userId).maybeSingle();
     } catch (e) {
       return null;
@@ -50,7 +51,6 @@ class SupabaseRepository {
       final user = _client.auth.currentUser;
       if (user == null) return false;
 
-      // 학번으로 기수 계산 (예: 2023xxxx -> 23기)
       int cohort = 0;
       if (studentId.length >= 4) {
         cohort = int.tryParse(studentId.substring(2, 4)) ?? 0;
@@ -72,6 +72,27 @@ class SupabaseRepository {
       return true;
     } catch (e) {
       debugPrint("Profile Update Error: $e");
+      return false;
+    }
+  }
+
+  // [New] 임원진 여부 확인 (삭제 권한용)
+  Future<bool> isAdmin() async {
+    try {
+      final userId = _client.auth.currentUser?.id;
+      if (userId == null) return false;
+
+      final data = await _client
+          .from('users')
+          .select('role')
+          .eq('id', userId)
+          .maybeSingle();
+
+      if (data == null) return false;
+
+      final role = data['role'] as String?;
+      return role == 'admin' || role == 'manager' || role == 'executive';
+    } catch (e) {
       return false;
     }
   }
@@ -98,7 +119,6 @@ class SupabaseRepository {
       });
       return true;
     } catch (e) {
-      debugPrint("Add Official Error: $e");
       return false;
     }
   }
@@ -128,7 +148,6 @@ class SupabaseRepository {
     try {
       final userId = _client.auth.currentUser?.id;
       if (userId == null) return false;
-
       await _client.from('personal_schedules').insert({
         'user_id': userId,
         'title': title,
@@ -138,7 +157,6 @@ class SupabaseRepository {
       });
       return true;
     } catch (e) {
-      debugPrint("Add Personal Error: $e");
       return false;
     }
   }
@@ -179,7 +197,6 @@ class SupabaseRepository {
   Stream<List<Map<String, dynamic>>> getMyArchivesStream() {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return const Stream.empty();
-
     return _client
         .from('archives')
         .stream(primaryKey: ['id'])
@@ -191,7 +208,6 @@ class SupabaseRepository {
     try {
       final userId = _client.auth.currentUser?.id;
       if (userId == null) return;
-
       await _client.from('archives').insert({
         'user_id': userId,
         'title': title,
@@ -206,7 +222,7 @@ class SupabaseRepository {
 
   // --- [Music Social Features] ---
 
-  // 1. 댓글 작성 (client -> _client 수정됨)
+  // 1. 댓글 작성
   Future<void> addComment(int songId, String content) async {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception("로그인이 필요합니다.");
@@ -218,13 +234,12 @@ class SupabaseRepository {
     });
   }
 
-  // 2. 댓글 가져오기 (중복 제거 및 최적화, client -> _client 수정됨)
+  // 2. 댓글 가져오기 (Users 테이블 JOIN)
   Future<List<Map<String, dynamic>>> fetchComments(int songId) async {
     try {
-      // 'comments_view'에서 긁어오기만 하면 됨
       final response = await _client
-          .from('comments_view')
-          .select()
+          .from('comments')
+          .select('*, users(name, cohort)') // users 테이블의 name, cohort 필드 로드
           .eq('song_id', songId)
           .order('created_at', ascending: false);
 
@@ -235,11 +250,15 @@ class SupabaseRepository {
     }
   }
 
-  // 3. 좋아요 상태 확인
+  // 3. 댓글 삭제
+  Future<void> deleteComment(int commentId) async {
+    await _client.from('comments').delete().eq('id', commentId);
+  }
+
+  // 4. 좋아요 상태 확인
   Future<bool> isSongLiked(int songId) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return false;
-
     try {
       final response = await _client
           .from('song_likes')
@@ -253,7 +272,23 @@ class SupabaseRepository {
     }
   }
 
-  // 4. 좋아요 토글
+  // [New] 5. 좋아요 갯수 가져오기 (수정됨)
+  Future<int> getSongLikeCount(int songId) async {
+    try {
+      // .count()는 int를 바로 반환합니다.
+      final count = await _client
+          .from('song_likes')
+          .count(CountOption.exact)
+          .eq('song_id', songId);
+
+      return count;
+    } catch (e) {
+      debugPrint("Like Count Error: $e");
+      return 0;
+    }
+  }
+
+  // 6. 좋아요 토글
   Future<bool> toggleSongLike(int songId) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return false;
@@ -265,13 +300,13 @@ class SupabaseRepository {
           .delete()
           .eq('user_id', userId)
           .eq('song_id', songId);
-      return false; // 좋아요 취소됨
+      return false;
     } else {
       await _client.from('song_likes').insert({
         'user_id': userId,
         'song_id': songId,
       });
-      return true; // 좋아요됨
+      return true;
     }
   }
 
@@ -291,10 +326,8 @@ class SupabaseRepository {
         if (a['role'] != 'manager' && b['role'] == 'manager') return 1;
         return (a['name'] ?? '').compareTo(b['name'] ?? '');
       });
-
       return members;
     } catch (e) {
-      debugPrint("Fetch Team Members Error: $e");
       return [];
     }
   }
