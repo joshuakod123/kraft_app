@@ -1,13 +1,13 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:table_calendar/table_calendar.dart';
-import 'package:glass_kit/glass_kit.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+
+// [Provider 및 Enum 연결]
 import '../../core/constants/department_enum.dart';
 import '../../core/state/global_providers.dart';
-import '../../core/data/supabase_repository.dart';
-import 'curriculum_provider.dart';
 
 class CurriculumListScreen extends ConsumerStatefulWidget {
   const CurriculumListScreen({super.key});
@@ -17,317 +17,788 @@ class CurriculumListScreen extends ConsumerStatefulWidget {
 }
 
 class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
+  final _supabase = Supabase.instance.client;
+
+  CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
+
+  Map<DateTime, List<Map<String, dynamic>>> _events = {};
 
   @override
   void initState() {
     super.initState();
-    _selectedDay = DateTime.now();
+    _selectedDay = _focusedDay;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fetchSchedules();
+    });
   }
 
-  List<CalendarEvent> _getEventsForDay(DateTime day, List<CalendarEvent> allEvents) {
-    return allEvents.where((event) => isSameDay(event.date, day)).toList();
+  // --------------------------------------------------------
+  // 1. 데이터 로직
+  // --------------------------------------------------------
+  Future<void> _fetchSchedules() async {
+    try {
+      final myDept = ref.read(currentDeptProvider);
+      final myUserId = _supabase.auth.currentUser?.id;
+
+      final response = await _supabase
+          .from('schedules')
+          .select()
+          .order('start_time', ascending: true);
+
+      final data = response as List<dynamic>;
+      Map<DateTime, List<Map<String, dynamic>>> newEvents = {};
+
+      for (var item in data) {
+        final String? itemDept = item['department'];
+        final String? itemUserId = item['user_id'];
+        final bool isOfficial = item['is_official'] ?? false;
+
+        bool show = false;
+        if (itemUserId == myUserId) {
+          show = true;
+        } else if (isOfficial && itemDept == myDept.name) {
+          show = true;
+        }
+
+        if (!show) continue;
+
+        DateTime startDate = DateTime.parse(item['start_time']).toLocal();
+        DateTime dateKey = DateTime(startDate.year, startDate.month, startDate.day);
+
+        if (newEvents[dateKey] == null) {
+          newEvents[dateKey] = [];
+        }
+        newEvents[dateKey]!.add(item);
+      }
+
+      if (mounted) {
+        setState(() {
+          _events = newEvents;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching schedules: $e');
+    }
   }
 
-  // [상세 보기 팝업]
-  void _showDetailDialog(CalendarEvent event) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: GlassContainer.clearGlass(
-          height: 400,
-          width: double.infinity,
-          borderRadius: BorderRadius.circular(20),
-          borderWidth: 1.0,
-          borderColor: event.isOfficial ? Colors.cyanAccent.withValues(alpha: 0.5) : Colors.purpleAccent.withValues(alpha: 0.5),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: event.isOfficial ? Colors.cyanAccent : Colors.purpleAccent,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      event.isOfficial ? "OFFICIAL" : "PERSONAL",
-                      style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white70),
-                    onPressed: () => Navigator.pop(context),
-                  )
-                ],
-              ),
-              const SizedBox(height: 20),
-              Text(event.title, style: GoogleFonts.chakraPetch(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  const Icon(Icons.access_time_filled, color: Colors.grey, size: 16),
-                  const SizedBox(width: 8),
-                  Text(
-                    "${DateFormat('HH:mm').format(event.date)} ~ ${event.endTime != null ? DateFormat('HH:mm').format(event.endTime!) : '??:??'}",
-                    style: const TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              const Divider(color: Colors.white24),
-              const SizedBox(height: 20),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Text(
-                    event.description.isNotEmpty ? event.description : "No description provided.",
-                    style: const TextStyle(color: Colors.white70, height: 1.5),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  List<Map<String, dynamic>> _getEventsForDay(DateTime day) {
+    return _events[DateTime(day.year, day.month, day.day)] ?? [];
   }
 
-  // [일정 추가 팝업 - 시간 설정 포함]
-  void _showAddEventDialog(bool isManager, int teamId) {
-    final titleCtrl = TextEditingController();
-    final descCtrl = TextEditingController();
-    bool isOfficial = false;
+  Future<void> _addSchedule({
+    required String title,
+    required String description,
+    required DateTime startTime,
+    required DateTime endTime,
+    required bool isOfficial,
+  }) async {
+    final myDept = ref.read(currentDeptProvider);
 
-    DateTime date = _selectedDay ?? DateTime.now();
-    TimeOfDay startTime = TimeOfDay.now();
-    TimeOfDay endTime = TimeOfDay.now().replacing(hour: TimeOfDay.now().hour + 1);
+    try {
+      await _supabase.from('schedules').insert({
+        'title': title,
+        'description': description,
+        'start_time': startTime.toIso8601String(),
+        'end_time': endTime.toIso8601String(),
+        'is_official': isOfficial,
+        'department': myDept.name,
+        'user_id': _supabase.auth.currentUser?.id,
+      });
 
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          Future<void> pickTime(bool isStart) async {
-            final picked = await showTimePicker(
-              context: context,
-              initialTime: isStart ? startTime : endTime,
-            );
-            if (picked != null) {
-              setDialogState(() {
-                if (isStart) startTime = picked;
-                else endTime = picked;
-              });
-            }
-          }
+      await _fetchSchedules();
 
-          return AlertDialog(
-            backgroundColor: const Color(0xFF1E1E1E),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Text("Add Schedule", style: GoogleFonts.chakraPetch(color: Colors.white, fontWeight: FontWeight.bold)),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (isManager) ...[
-                    Row(children: [
-                      Expanded(child: ChoiceChip(label: const Center(child: Text("Personal")), selected: !isOfficial, onSelected: (v) => setDialogState(() => isOfficial = !v), selectedColor: Colors.purpleAccent, backgroundColor: Colors.black54, labelStyle: TextStyle(color: !isOfficial ? Colors.black : Colors.white))),
-                      const SizedBox(width: 10),
-                      Expanded(child: ChoiceChip(label: const Center(child: Text("Official")), selected: isOfficial, onSelected: (v) => setDialogState(() => isOfficial = v), selectedColor: Colors.cyanAccent, backgroundColor: Colors.black54, labelStyle: TextStyle(color: isOfficial ? Colors.black : Colors.white))),
-                    ]),
-                    const SizedBox(height: 16),
-                  ],
-                  _buildFancyTextField(titleCtrl, 'Title'),
-                  const SizedBox(height: 12),
-                  _buildFancyTextField(descCtrl, 'Description', maxLines: 3),
-                  const SizedBox(height: 20),
-
-                  // 날짜 및 시간 선택 UI
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white10)),
-                    child: Column(
-                      children: [
-                        InkWell(
-                          onTap: () async {
-                            final picked = await showDatePicker(context: context, initialDate: date, firstDate: DateTime(2020), lastDate: DateTime(2030));
-                            if (picked != null) setDialogState(() => date = picked);
-                          },
-                          child: Row(children: [const Icon(Icons.calendar_today, color: Colors.grey, size: 16), const SizedBox(width: 8), Text(DateFormat('yyyy.MM.dd (E)').format(date), style: const TextStyle(color: Colors.white))]),
-                        ),
-                        const Divider(color: Colors.white10, height: 24),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            InkWell(
-                              onTap: () => pickTime(true),
-                              child: Row(children: [const Icon(Icons.access_time, color: Colors.greenAccent, size: 16), const SizedBox(width: 8), Text(startTime.format(context), style: const TextStyle(color: Colors.white))]),
-                            ),
-                            const Text("~", style: TextStyle(color: Colors.grey)),
-                            InkWell(
-                              onTap: () => pickTime(false),
-                              child: Row(children: [Text(endTime.format(context), style: const TextStyle(color: Colors.white)), const SizedBox(width: 8), const Icon(Icons.access_time, color: Colors.redAccent, size: 16)]),
-                            ),
-                          ],
-                        )
-                      ],
-                    ),
-                  )
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.grey))),
-              ElevatedButton(
-                onPressed: () async {
-                  if (titleCtrl.text.isNotEmpty) {
-                    final startDateTime = DateTime(date.year, date.month, date.day, startTime.hour, startTime.minute);
-                    final endDateTime = DateTime(date.year, date.month, date.day, endTime.hour, endTime.minute);
-
-                    if (isOfficial) {
-                      await SupabaseRepository().addCurriculum(titleCtrl.text, descCtrl.text, startDateTime, endDateTime, teamId);
-                    } else {
-                      await SupabaseRepository().addPersonalSchedule(titleCtrl.text, descCtrl.text, startDateTime, endDateTime);
-                    }
-
-                    if (context.mounted) {
-                      Navigator.pop(context);
-                      ref.invalidate(calendarEventsProvider);
-                    }
-                  }
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: isOfficial ? Colors.cyanAccent : Colors.purpleAccent, foregroundColor: Colors.black),
-                child: const Text("Add"),
-              )
-            ],
-          );
-        },
-      ),
-    );
+      if (mounted) {
+        // [수정] 스낵바 대신 팝업 호출
+        _showPopup(context, "성공", "일정이 추가되었습니다!", myDept.color);
+      }
+    } catch (e) {
+      debugPrint('Error adding schedule: $e');
+      if (mounted) {
+        _showPopup(context, "오류", "일정 추가에 실패했습니다.\n$e", Colors.redAccent, isError: true);
+      }
+    }
   }
 
-  Widget _buildFancyTextField(TextEditingController ctrl, String hint, {int maxLines = 1}) {
-    return TextField(
-      controller: ctrl,
-      style: const TextStyle(color: Colors.white),
-      maxLines: maxLines,
-      decoration: InputDecoration(
-        labelText: hint,
-        labelStyle: const TextStyle(color: Colors.grey),
-        filled: true,
-        fillColor: Colors.black54,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-      ),
-    );
+  Future<void> _deleteSchedule(int id, bool isOfficial, bool isManager) async {
+    if (isOfficial && !isManager) {
+      _showPopup(context, "권한 없음", "공식 일정은 임원만 삭제할 수 있습니다.", Colors.redAccent, isError: true);
+      return;
+    }
+
+    try {
+      await _supabase.from('schedules').delete().eq('id', id);
+      await _fetchSchedules();
+      if (mounted) {
+        _showPopup(context, "삭제 완료", "일정이 삭제되었습니다.", Colors.greenAccent);
+      }
+    } catch (e) {
+      debugPrint('Delete Error: $e');
+      if (mounted) {
+        _showPopup(context, "오류", "삭제에 실패했습니다.", Colors.redAccent, isError: true);
+      }
+    }
   }
 
+  // --------------------------------------------------------
+  // 2. UI 빌드
+  // --------------------------------------------------------
   @override
   Widget build(BuildContext context) {
-    final allEvents = ref.watch(calendarEventsProvider);
-    final dept = ref.watch(currentDeptProvider);
-    final isManager = ref.watch(isManagerProvider);
-    final selectedEvents = _getEventsForDay(_selectedDay ?? DateTime.now(), allEvents);
+    final Department currentDept = ref.watch(currentDeptProvider);
+    final bool isManager = ref.watch(isManagerProvider);
+    final Color themeColor = currentDept.color;
+    final dailyEvents = _getEventsForDay(_selectedDay!);
 
     return Scaffold(
-      backgroundColor: Colors.black,
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 90.0),
-        child: FloatingActionButton(
-          backgroundColor: isManager ? Colors.cyanAccent : Colors.purpleAccent,
-          shape: const CircleBorder(),
-          child: const Icon(Icons.add, color: Colors.black),
-          onPressed: () => _showAddEventDialog(isManager, dept.id),
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        title: Text(
+          "CALENDAR",
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+            fontSize: 22,
+            letterSpacing: 2.0,
+            color: Colors.white.withOpacity(0.9),
+          ),
         ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
+            onPressed: _fetchSchedules,
+          ),
+        ],
       ),
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.only(top: 60, bottom: 10),
-              child: TableCalendar(
-                firstDay: DateTime.utc(2020, 1, 1),
-                lastDay: DateTime.utc(2030, 12, 31),
-                focusedDay: _focusedDay,
-                currentDay: DateTime.now(),
-                calendarFormat: CalendarFormat.month,
-                selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-                onDaySelected: (selectedDay, focusedDay) => setState(() { _selectedDay = selectedDay; _focusedDay = focusedDay; }),
-                eventLoader: (day) => _getEventsForDay(day, allEvents),
-                headerStyle: const HeaderStyle(titleCentered: true, formatButtonVisible: false, titleTextStyle: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold), leftChevronIcon: Icon(Icons.chevron_left, color: Colors.white), rightChevronIcon: Icon(Icons.chevron_right, color: Colors.white)),
-                calendarStyle: CalendarStyle(defaultTextStyle: const TextStyle(color: Colors.white), weekendTextStyle: const TextStyle(color: Colors.white54), outsideTextStyle: const TextStyle(color: Colors.white24), todayDecoration: const BoxDecoration(color: Colors.white24, shape: BoxShape.circle), selectedDecoration: BoxDecoration(color: dept.color, shape: BoxShape.circle)),
-                calendarBuilders: CalendarBuilders(
-                  markerBuilder: (context, date, events) {
-                    if (events.isEmpty) return null;
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: events.take(3).map((e) {
-                        final event = e as CalendarEvent;
-                        return Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 1.0),
-                          width: 6, height: 6,
-                          decoration: BoxDecoration(shape: BoxShape.circle, color: event.isOfficial ? Colors.cyanAccent : Colors.purpleAccent),
-                        );
-                      }).toList(),
-                    );
-                  },
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              themeColor.withOpacity(0.25),
+              const Color(0xFF121212),
+              const Color(0xFF000000),
+            ],
+            stops: const [0.0, 0.6, 1.0],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+
+              // 캘린더
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: _GlassContainer(
+                  padding: const EdgeInsets.fromLTRB(10, 0, 10, 15),
+                  child: TableCalendar(
+                    firstDay: DateTime.utc(2023, 1, 1),
+                    lastDay: DateTime.utc(2030, 12, 31),
+                    focusedDay: _focusedDay,
+                    calendarFormat: _calendarFormat,
+                    headerStyle: const HeaderStyle(
+                      formatButtonVisible: false,
+                      titleCentered: true,
+                      titleTextStyle: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+                      leftChevronIcon: Icon(Icons.chevron_left_rounded, color: Colors.white70),
+                      rightChevronIcon: Icon(Icons.chevron_right_rounded, color: Colors.white70),
+                    ),
+                    daysOfWeekStyle: const DaysOfWeekStyle(
+                      weekendStyle: TextStyle(color: Colors.white38, fontSize: 12),
+                      weekdayStyle: TextStyle(color: Colors.white38, fontSize: 12),
+                    ),
+                    calendarStyle: CalendarStyle(
+                      defaultTextStyle: const TextStyle(color: Colors.white70),
+                      weekendTextStyle: const TextStyle(color: Colors.white60),
+                      outsideDaysVisible: false,
+                      todayDecoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.08),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white24),
+                      ),
+                      selectedDecoration: BoxDecoration(
+                        color: themeColor.withOpacity(0.8),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(color: themeColor.withOpacity(0.6), blurRadius: 12, spreadRadius: 1)
+                        ],
+                      ),
+                      markerDecoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                    ),
+                    selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+                    onDaySelected: (selectedDay, focusedDay) {
+                      setState(() {
+                        _selectedDay = selectedDay;
+                        _focusedDay = focusedDay;
+                      });
+                    },
+                    onPageChanged: (focusedDay) => _focusedDay = focusedDay,
+                    eventLoader: _getEventsForDay,
+                  ),
                 ),
               ),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-              child: Text(
-                DateFormat('MMMM d, EEEE').format(_selectedDay ?? DateTime.now()),
-                style: GoogleFonts.chakraPetch(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold),
+
+              const SizedBox(height: 24),
+
+              // 날짜 헤더
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                child: Row(
+                  children: [
+                    Text(
+                      _selectedDay != null
+                          ? DateFormat('d MMM').format(_selectedDay!)
+                          : 'Select Date',
+                      style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(width: 10),
+                    if (_selectedDay != null)
+                      Text(
+                        DateFormat('yyyy').format(_selectedDay!),
+                        style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 28, fontWeight: FontWeight.w300),
+                      ),
+                  ],
+                ),
               ),
-            ),
-          ),
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                final event = selectedEvents[index];
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-                  child: GestureDetector(
-                    onTap: () => _showDetailDialog(event),
-                    child: GlassContainer.clearGlass(
-                      height: 80, width: double.infinity, borderRadius: BorderRadius.circular(16),
-                      borderWidth: 1.0, borderColor: Colors.white10,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
+
+              const SizedBox(height: 16),
+
+              // 리스트
+              Expanded(
+                child: dailyEvents.isEmpty
+                    ? Center(
+                  child: Text(
+                    "등록된 일정이 없습니다.",
+                    style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 15),
+                  ),
+                )
+                    : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+                  itemCount: dailyEvents.length,
+                  itemBuilder: (context, index) {
+                    final event = dailyEvents[index];
+                    final bool isOfficial = event['is_official'] ?? false;
+                    final int id = event['id'];
+                    final bool canDelete = isManager || !isOfficial;
+
+                    final bool isFirst = index == 0;
+                    final bool isLast = index == dailyEvents.length - 1;
+
+                    return IntrinsicHeight(
                       child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Container(width: 4, height: 40, decoration: BoxDecoration(color: event.isOfficial ? Colors.cyanAccent : Colors.purpleAccent, borderRadius: BorderRadius.circular(2))),
-                          const SizedBox(width: 16),
-                          Expanded(
+                          SizedBox(
+                            width: 40,
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Text(event.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                                const SizedBox(height: 4),
-                                Text(
-                                  "${DateFormat('HH:mm').format(event.date)} ~ ${event.endTime != null ? DateFormat('HH:mm').format(event.endTime!) : ''} | ${event.description}",
-                                  style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
-                                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                                Expanded(
+                                  child: Container(
+                                    width: 2,
+                                    color: isFirst ? Colors.transparent : themeColor.withOpacity(0.3),
+                                  ),
+                                ),
+                                Container(
+                                  width: 12,
+                                  height: 12,
+                                  decoration: BoxDecoration(
+                                      color: isOfficial ? const Color(0xFFFFD700) : themeColor,
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: (isOfficial ? const Color(0xFFFFD700) : themeColor).withOpacity(0.8),
+                                          blurRadius: 8,
+                                          spreadRadius: 2,
+                                        )
+                                      ]
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Container(
+                                    width: 2,
+                                    color: isLast ? Colors.transparent : themeColor.withOpacity(0.3),
+                                  ),
                                 ),
                               ],
                             ),
                           ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 16.0),
+                              child: GestureDetector(
+                                onTap: () => _showDetailDialog(context, event, themeColor, isManager, canDelete),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.05),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: isOfficial
+                                            ? const Color(0xFFFFD700).withOpacity(0.3)
+                                            : Colors.white.withOpacity(0.1),
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.2),
+                                          blurRadius: 10,
+                                          offset: const Offset(0, 4),
+                                        )
+                                      ]
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16.0),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                event['title'] ?? 'No Title',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 16,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            if (isOfficial)
+                                              Container(
+                                                margin: const EdgeInsets.symmetric(horizontal: 8),
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFFFFD700).withOpacity(0.2),
+                                                  borderRadius: BorderRadius.circular(8),
+                                                  border: Border.all(color: const Color(0xFFFFD700).withOpacity(0.5)),
+                                                ),
+                                                child: const Text("공식 일정", style: TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold)),
+                                              ),
+                                            if (canDelete)
+                                              GestureDetector(
+                                                onTap: () => _showDeleteConfirmDialog(context, id, isOfficial, isManager),
+                                                child: Icon(Icons.delete_outline_rounded, size: 20, color: Colors.white.withOpacity(0.4)),
+                                              ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Row(
+                                          children: [
+                                            Icon(Icons.access_time_rounded, size: 14, color: Colors.white.withOpacity(0.5)),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              _formatTimeRange(event['start_time'], event['end_time']),
+                                              style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13),
+                                            ),
+                                          ],
+                                        ),
+                                        if (event['description'] != null && event['description'].toString().isNotEmpty)
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 8.0),
+                                            child: Text(
+                                              event['description'],
+                                              style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14),
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
-                    ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showAddScheduleSheet(context, themeColor, isManager),
+        backgroundColor: themeColor,
+        child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
+      ),
+    );
+  }
+
+  String _formatTimeRange(String? start, String? end) {
+    if (start == null || end == null) return '';
+    final s = DateTime.parse(start).toLocal();
+    final e = DateTime.parse(end).toLocal();
+    return "${DateFormat('HH:mm').format(s)} - ${DateFormat('HH:mm').format(e)}";
+  }
+
+  // --------------------------------------------------------
+  // 3. 팝업 & 다이얼로그 (한국어 적용)
+  // --------------------------------------------------------
+
+  // [NEW] 중앙 팝업 알림 (스낵바 대체)
+  void _showPopup(BuildContext context, String title, String message, Color themeColor, {bool isError = false}) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: _GlassContainer(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isError ? Icons.error_outline_rounded : Icons.check_circle_outline_rounded,
+                color: isError ? Colors.redAccent : Colors.greenAccent,
+                size: 48,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                title,
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: themeColor.withOpacity(0.8),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                );
-              },
-              childCount: selectedEvents.length,
+                  child: const Text("확인"),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 상세 보기 팝업
+  void _showDetailDialog(BuildContext context, Map<String, dynamic> event, Color themeColor, bool isManager, bool canDelete) {
+    final bool isOfficial = event['is_official'] ?? false;
+    final int id = event['id'];
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: _GlassContainer(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isOfficial ? const Color(0xFFFFD700).withOpacity(0.2) : themeColor.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isOfficial ? const Color(0xFFFFD700) : themeColor,
+                        ),
+                      ),
+                      child: Text(
+                        isOfficial ? "공식 일정" : "개인 일정",
+                        style: TextStyle(
+                          color: isOfficial ? const Color(0xFFFFD700) : themeColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Icon(Icons.close, color: Colors.white.withOpacity(0.5)),
+                    )
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  event['title'] ?? '제목 없음',
+                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold, height: 1.2),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const Icon(Icons.access_time, color: Colors.white70, size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      "${DateFormat('yyyy.MM.dd (E)').format(DateTime.parse(event['start_time']).toLocal())}   " +
+                          _formatTimeRange(event['start_time'], event['end_time']),
+                      style: const TextStyle(color: Colors.white70, fontSize: 15),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    event['description'] != null && event['description'].toString().isNotEmpty
+                        ? event['description']
+                        : "설명이 없습니다.",
+                    style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 15, height: 1.5),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                if (canDelete)
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _showDeleteConfirmDialog(context, id, isOfficial, isManager);
+                      },
+                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                      label: const Text("일정 삭제", style: TextStyle(color: Colors.redAccent)),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: Colors.redAccent.withOpacity(0.5)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  )
+              ],
             ),
           ),
-          const SliverToBoxAdapter(child: SizedBox(height: 120)),
+        );
+      },
+    );
+  }
+
+  void _showAddScheduleSheet(BuildContext context, Color themeColor, bool isManager) {
+    DateTime now = DateTime.now();
+    DateTime inputDate = _selectedDay ?? now;
+    TimeOfDay startTime = TimeOfDay(hour: now.hour + 1, minute: 0);
+    TimeOfDay endTime = TimeOfDay(hour: now.hour + 2, minute: 0);
+
+    final titleController = TextEditingController();
+    final descController = TextEditingController();
+    bool isOfficial = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
+            return Padding(
+              padding: EdgeInsets.only(bottom: bottomPadding),
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E1E1E).withOpacity(0.9),
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+                      border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+                        const SizedBox(height: 24),
+                        Text("새 일정 추가", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                        const SizedBox(height: 20),
+                        _buildTextField(titleController, "제목", Icons.title, themeColor),
+                        const SizedBox(height: 16),
+                        _buildTextField(descController, "설명 (선택사항)", Icons.description_outlined, themeColor, maxLines: 2),
+                        const SizedBox(height: 20),
+                        Row(
+                          children: [
+                            Expanded(child: _buildTimePickerButton(context, "시작", startTime, themeColor, () async {
+                              final time = await showTimePicker(context: context, initialTime: startTime);
+                              if (time != null) setSheetState(() => startTime = time);
+                            })),
+                            const SizedBox(width: 12),
+                            Icon(Icons.arrow_forward_rounded, color: Colors.white.withOpacity(0.2)),
+                            const SizedBox(width: 12),
+                            Expanded(child: _buildTimePickerButton(context, "종료", endTime, themeColor, () async {
+                              final time = await showTimePicker(context: context, initialTime: endTime);
+                              if (time != null) setSheetState(() => endTime = time);
+                            })),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        if (isManager)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
+                            child: Row(
+                              children: [
+                                const Text("공식 일정", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                const Spacer(),
+                                Switch(
+                                  value: isOfficial,
+                                  activeColor: const Color(0xFF1E1E1E),
+                                  activeTrackColor: themeColor,
+                                  onChanged: (val) => setSheetState(() => isOfficial = val),
+                                ),
+                              ],
+                            ),
+                          ),
+                        const SizedBox(height: 30),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 56,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              if (titleController.text.isNotEmpty) {
+                                final startDateTime = DateTime(inputDate.year, inputDate.month, inputDate.day, startTime.hour, startTime.minute);
+                                final endDateTime = DateTime(inputDate.year, inputDate.month, inputDate.day, endTime.hour, endTime.minute);
+                                _addSchedule(title: titleController.text, description: descController.text, startTime: startDateTime, endTime: endDateTime, isOfficial: isOfficial);
+                                Navigator.pop(context);
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(backgroundColor: themeColor, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 0),
+                            child: const Text("일정 생성", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // [수정] 삭제 확인 팝업 (한국어)
+  void _showDeleteConfirmDialog(BuildContext context, int id, bool isOfficial, bool isManager) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.delete_forever_rounded, color: Colors.redAccent, size: 48),
+              const SizedBox(height: 16),
+              const Text("일정 삭제", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text(
+                "정말 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 14),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text("취소", style: TextStyle(color: Colors.white.withOpacity(0.5))),
+                    ),
+                  ),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _deleteSchedule(id, isOfficial, isManager);
+                      },
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                      child: const Text("삭제"),
+                    ),
+                  ),
+                ],
+              )
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField(TextEditingController controller, String hint, IconData icon, Color color, {int maxLines = 1}) {
+    return TextField(
+      controller: controller,
+      maxLines: maxLines,
+      style: const TextStyle(color: Colors.white),
+      cursorColor: color,
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
+        prefixIcon: Icon(icon, color: Colors.white38, size: 20),
+        filled: true,
+        fillColor: Colors.white.withOpacity(0.05),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: color)),
+      ),
+    );
+  }
+
+  Widget _buildTimePickerButton(BuildContext context, String label, TimeOfDay time, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12)),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white.withOpacity(0.1))),
+            child: Row(children: [Icon(Icons.access_time, color: color, size: 18), const SizedBox(width: 8), Text(time.format(context), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))]),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _GlassContainer extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+  const _GlassContainer({required this.child, this.padding});
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(color: Colors.white.withOpacity(0.04), borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.white.withOpacity(0.08))),
+          child: child,
+        ),
       ),
     );
   }
