@@ -2,11 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseRepository {
-  // [중요] 이 변수(_client)를 모든 곳에서 사용해야 합니다.
   final SupabaseClient _client = Supabase.instance.client;
 
   User? get currentUser => _client.auth.currentUser;
-  // [New] 현재 로그인한 유저의 ID Getter
   String? get currentUserId => _client.auth.currentUser?.id;
 
   // --- Auth & Profile ---
@@ -28,6 +26,63 @@ class SupabaseRepository {
     }
   }
 
+  Future<Map<String, dynamic>?> requestTemporaryPassword({
+    required String email,
+    required String name,
+    required String phone,
+  }) async {
+    try {
+      final response = await _client.rpc('reset_password_with_verification', params: {
+        'p_email': email,
+        'p_name': name,
+        'p_phone': phone,
+      });
+
+      if (response == null) return null;
+
+      // JSON 객체를 Map으로 반환 {'password': '...', 'team_id': 1}
+      return Map<String, dynamic>.from(response);
+    } catch (e) {
+      debugPrint("Temp Password Error: $e");
+      return null;
+    }
+  }
+
+  Future<String?> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final user = _client.auth.currentUser;
+      if (user == null || user.email == null) return '로그인이 필요합니다.';
+
+      // 1. 기존 비밀번호 검증
+      final authResponse = await _client.auth.signInWithPassword(
+        email: user.email!,
+        password: currentPassword,
+      );
+
+      if (authResponse.user == null) {
+        return '기존 비밀번호가 일치하지 않습니다.';
+      }
+
+      // 2. 새 비밀번호 업데이트
+      await _client.auth.updateUser(
+        UserAttributes(password: newPassword),
+      );
+      // [New] 3. 임시 비밀번호 상태 해제 (is_temp_password = false)
+      await _client.from('users').update({
+        'is_temp_password': false
+      }).eq('id', user.id);
+
+      return null;
+    } catch (e) {
+      if (e.toString().contains('Invalid login credentials')) {
+        return '기존 비밀번호가 올바르지 않습니다.';
+      }
+      return '비밀번호 변경 중 오류가 발생했습니다.';
+    }
+  }
   Future<Map<String, dynamic>?> getUserProfile() async {
     try {
       final userId = _client.auth.currentUser?.id;
@@ -272,10 +327,9 @@ class SupabaseRepository {
     }
   }
 
-  // [New] 5. 좋아요 갯수 가져오기 (수정됨)
+  // 5. 좋아요 갯수 가져오기
   Future<int> getSongLikeCount(int songId) async {
     try {
-      // .count()는 int를 바로 반환합니다.
       final count = await _client
           .from('song_likes')
           .count(CountOption.exact)
