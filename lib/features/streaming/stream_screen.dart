@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-
 import '../../core/data/supabase_repository.dart';
 import 'audio_service.dart';
 import 'player_provider.dart';
@@ -28,10 +27,9 @@ class _StreamScreenState extends ConsumerState<StreamScreen> with SingleTickerPr
   final _repo = SupabaseRepository();
 
   bool _isLiked = false;
-  int _likeCount = 0; // [New] 좋아요 갯수 상태
+  int _likeCount = 0;
   bool _isSending = false;
   bool _showComments = false;
-
   String? _currentUserId;
   bool _isAdmin = false;
 
@@ -39,6 +37,8 @@ class _StreamScreenState extends ConsumerState<StreamScreen> with SingleTickerPr
   void initState() {
     super.initState();
     _initData();
+    // 화면 진입 시 자동 재생을 원한다면 아래 주석 해제
+    // KraftAudioService.playMediaItem(widget.mediaItem);
   }
 
   @override
@@ -51,9 +51,22 @@ class _StreamScreenState extends ConsumerState<StreamScreen> with SingleTickerPr
   }
 
   Future<void> _initData() async {
-    _checkUserPermissions();
-    _checkLikeStatus();
-    _fetchLikeCount(); // [New] 갯수 가져오기
+    final userId = _repo.currentUserId;
+    final isAdmin = await _repo.isAdmin();
+    final songId = int.tryParse(widget.mediaItem.id) ?? 0;
+
+    // 비동기 데이터를 한 번에 가져와서 상태 업데이트
+    final liked = await _repo.isSongLiked(songId);
+    final count = await _repo.getSongLikeCount(songId);
+
+    if (mounted) {
+      setState(() {
+        _currentUserId = userId;
+        _isAdmin = isAdmin;
+        _isLiked = liked;
+        _likeCount = count;
+      });
+    }
   }
 
   Future<void> _checkUserPermissions() async {
@@ -346,17 +359,14 @@ class _StreamScreenState extends ConsumerState<StreamScreen> with SingleTickerPr
     final content = c['content'] ?? "";
     final date = _formatDate(c['created_at']);
 
-    // [Check] Users Join Data Handling
-    final userData = c['users']; // users가 Map일 수도, 아닐 수도 있음 체크
-    String name = "Unknown";
+    // Join된 데이터 안전하게 추출
+    final userData = c['users'];
+    String name = "익명";
     int cohort = 0;
 
-    if (userData is Map<String, dynamic>) {
+    if (userData is Map) {
       name = userData['name'] ?? "Unknown";
       cohort = userData['cohort'] ?? 0;
-    } else if (userData is List && userData.isNotEmpty) { // 가끔 List로 올 수 있음
-      name = userData[0]['name'] ?? "Unknown";
-      cohort = userData[0]['cohort'] ?? 0;
     }
 
     final bool canDelete = (_currentUserId == userId) || _isAdmin;
@@ -366,8 +376,8 @@ class _StreamScreenState extends ConsumerState<StreamScreen> with SingleTickerPr
       children: [
         CircleAvatar(
           radius: 18,
-          backgroundColor: Colors.primaries[name.hashCode % Colors.primaries.length],
-          child: Text(name.isNotEmpty ? name[0] : "?", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          backgroundColor: Colors.blueGrey,
+          child: Text(name.isNotEmpty ? name[0] : "?", style: const TextStyle(color: Colors.white, fontSize: 12)),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -377,26 +387,18 @@ class _StreamScreenState extends ConsumerState<StreamScreen> with SingleTickerPr
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    "$cohort기 $name",
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                  ),
-                  Row(
-                    children: [
-                      Text(date, style: const TextStyle(color: Colors.grey, fontSize: 11)),
-                      if (canDelete) ...[
-                        const SizedBox(width: 8),
-                        GestureDetector(
-                          onTap: () => _showDeleteConfirmDialog(commentId),
-                          child: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 16),
-                        ),
-                      ],
-                    ],
-                  ),
+                  Text("$cohort기 $name", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                  if (canDelete)
+                    GestureDetector(
+                      onTap: () => _showDeleteConfirmDialog(commentId),
+                      child: const Icon(Icons.close, color: Colors.white38, size: 16),
+                    ),
                 ],
               ),
               const SizedBox(height: 4),
               Text(content, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+              const SizedBox(height: 2),
+              Text(date, style: const TextStyle(color: Colors.grey, fontSize: 10)),
             ],
           ),
         ),

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 
 class SupabaseRepository {
   final SupabaseClient _client = Supabase.instance.client;
@@ -309,7 +310,26 @@ class SupabaseRepository {
   Future<void> deleteComment(int commentId) async {
     await _client.from('comments').delete().eq('id', commentId);
   }
+  Future<List<MediaItem>> fetchSongs() async {
+    final List<dynamic> response = await _client
+        .from('songs')
+        .select('*')
+        .order('created_at', ascending: false);
 
+    return response.map((song) {
+      // iOS 재생을 위해 URL 내 공백/특수문자 인코딩
+      final encodedUrl = Uri.encodeFull(song['file_path'] ?? '');
+
+      return MediaItem(
+        id: song['id'].toString(),
+        album: "Kraft Streaming",
+        title: song['title'] ?? '제목 없음',
+        artist: song['artist'] ?? '아티스트 미상',
+        artUri: Uri.parse(song['cover_url'] ?? ''),
+        extras: {'url': encodedUrl}, // 실제 재생 경로를 여기에 저장
+      );
+    }).toList();
+  }
   // 4. 좋아요 상태 확인
   Future<bool> isSongLiked(int songId) async {
     final userId = _client.auth.currentUser?.id;
