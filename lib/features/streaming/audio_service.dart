@@ -1,3 +1,4 @@
+// lib/features/streaming/audio_service.dart
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 
@@ -10,19 +11,18 @@ class KraftAudioService {
 
   static Future<void> playMediaItem(MediaItem item) async {
     try {
-      // Repository에서 저장한 인코딩된 URL을 가져옴
       final url = item.extras?['url'] ?? '';
       if (url.isEmpty) return;
 
       await _player.setAudioSource(
         AudioSource.uri(
           Uri.parse(url),
-          tag: item, // 잠금화면 및 알림창 제어용
+          tag: item,
         ),
       );
       _player.play();
     } catch (e) {
-      print("재생 중 오류 발생: $e");
+      print("재생 에러: $e");
     }
   }
 

@@ -1,429 +1,109 @@
+// lib/features/streaming/stream_screen.dart
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio_background/just_audio_background.dart';
-import 'package:just_audio/just_audio.dart';
-import 'package:flutter_animate/flutter_animate.dart';
-import '../../core/data/supabase_repository.dart';
 import 'audio_service.dart';
 import 'player_provider.dart';
 
-// 댓글 리스트 Provider
-final commentsProvider = FutureProvider.family.autoDispose<List<Map<String, dynamic>>, String>((ref, songId) {
-  final id = int.tryParse(songId) ?? 0;
-  return SupabaseRepository().fetchComments(id);
-});
-
-class StreamScreen extends ConsumerStatefulWidget {
-  final MediaItem mediaItem;
-  const StreamScreen({super.key, required this.mediaItem});
+class StreamScreen extends ConsumerWidget {
+  const StreamScreen({super.key});
 
   @override
-  ConsumerState<StreamScreen> createState() => _StreamScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    // 전역 상태에서 현재 노래를 감시합니다.
+    final song = ref.watch(currentSongProvider);
 
-class _StreamScreenState extends ConsumerState<StreamScreen> with SingleTickerProviderStateMixin {
-  final TextEditingController _commentController = TextEditingController();
-  final _repo = SupabaseRepository();
-
-  bool _isLiked = false;
-  int _likeCount = 0;
-  bool _isSending = false;
-  bool _showComments = false;
-  String? _currentUserId;
-  bool _isAdmin = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _initData();
-    // 화면 진입 시 자동 재생을 원한다면 아래 주석 해제
-    // KraftAudioService.playMediaItem(widget.mediaItem);
-  }
-
-  @override
-  void didUpdateWidget(covariant StreamScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.mediaItem.id != widget.mediaItem.id) {
-      _initData();
-      if (_showComments) setState(() => _showComments = false);
+    if (song == null) {
+      return const Scaffold(
+          backgroundColor: Colors.black,
+          body: Center(child: Text("재생 중인 곡이 없습니다.", style: TextStyle(color: Colors.white)))
+      );
     }
-  }
-
-  Future<void> _initData() async {
-    final userId = _repo.currentUserId;
-    final isAdmin = await _repo.isAdmin();
-    final songId = int.tryParse(widget.mediaItem.id) ?? 0;
-
-    // 비동기 데이터를 한 번에 가져와서 상태 업데이트
-    final liked = await _repo.isSongLiked(songId);
-    final count = await _repo.getSongLikeCount(songId);
-
-    if (mounted) {
-      setState(() {
-        _currentUserId = userId;
-        _isAdmin = isAdmin;
-        _isLiked = liked;
-        _likeCount = count;
-      });
-    }
-  }
-
-  Future<void> _checkUserPermissions() async {
-    final userId = _repo.currentUserId;
-    final isAdmin = await _repo.isAdmin();
-    if (mounted) {
-      setState(() {
-        _currentUserId = userId;
-        _isAdmin = isAdmin;
-      });
-    }
-  }
-
-  Future<void> _checkLikeStatus() async {
-    final songId = int.tryParse(widget.mediaItem.id) ?? 0;
-    final liked = await _repo.isSongLiked(songId);
-    if (mounted) setState(() => _isLiked = liked);
-  }
-
-  // [New] 좋아요 갯수 서버에서 가져오기
-  Future<void> _fetchLikeCount() async {
-    final songId = int.tryParse(widget.mediaItem.id) ?? 0;
-    final count = await _repo.getSongLikeCount(songId);
-    if (mounted) setState(() => _likeCount = count);
-  }
-
-  Future<void> _toggleLike() async {
-    final songId = int.tryParse(widget.mediaItem.id) ?? 0;
-
-    // [UI] 낙관적 업데이트 (서버 응답 기다리지 않고 즉시 반영)
-    setState(() {
-      _isLiked = !_isLiked;
-      _likeCount += _isLiked ? 1 : -1;
-      if (_likeCount < 0) _likeCount = 0; // 방어 코드
-    });
-
-    final success = await _repo.toggleSongLike(songId);
-
-    // 실패 시 롤백
-    if (!success && mounted) {
-      setState(() {
-        _isLiked = !_isLiked;
-        _likeCount += _isLiked ? 1 : -1;
-      });
-    }
-  }
-
-  Future<void> _submitComment() async {
-    final content = _commentController.text.trim();
-    if (content.isEmpty) return;
-
-    FocusScope.of(context).unfocus();
-    setState(() => _isSending = true);
-
-    try {
-      final songId = int.tryParse(widget.mediaItem.id) ?? 0;
-      await _repo.addComment(songId, content);
-
-      _commentController.clear();
-
-      // [Fix] 댓글 작성 후 Provider를 강제로 새로고침하여 즉시 반영
-      // refresh는 dispose 후 다시 create 하므로 최신 데이터를 가져옵니다.
-      ref.refresh(commentsProvider(widget.mediaItem.id));
-
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-    } finally {
-      if (mounted) setState(() => _isSending = false);
-    }
-  }
-
-  Future<void> _deleteComment(int commentId) async {
-    try {
-      await _repo.deleteComment(commentId);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('댓글이 삭제되었습니다.'), duration: Duration(seconds: 1)),
-        );
-        // 삭제 후에도 리스트 갱신
-        ref.refresh(commentsProvider(widget.mediaItem.id));
-      }
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('삭제 실패: $e')));
-    }
-  }
-
-  void _toggleCommentMode() {
-    setState(() {
-      _showComments = !_showComments;
-    });
-  }
-
-  @override
-  void dispose() {
-    _commentController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Scaffold(
       backgroundColor: Colors.black,
-      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
           Positioned.fill(
-            child: widget.mediaItem.artUri != null
-                ? Image.network(widget.mediaItem.artUri.toString(), fit: BoxFit.cover)
-                : Container(color: const Color(0xFF111111)),
+            child: song.artUri != null
+                ? Image.network(song.artUri.toString(), fit: BoxFit.cover)
+                : Container(color: Colors.grey[900]),
           ),
           Positioned.fill(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-              child: Container(color: Colors.black.withOpacity(0.7)),
+              child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+                  child: Container(color: Colors.black.withOpacity(0.6))
+              )
+          ),
+
+          SafeArea(
+            child: Column(
+              children: [
+                _buildTopBar(ref),
+                const Spacer(),
+                _buildAlbumArt(song),
+                const Spacer(),
+                _buildSongInfo(song),
+                const SizedBox(height: 30),
+                _buildControls(),
+                _buildProgressBar(),
+                const SizedBox(height: 40),
+              ],
             ),
           ),
-          Positioned.fill(
-            top: 0,
-            bottom: _showComments ? bottomInset : 0,
-            child: SafeArea(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
-                child: _showComments ? _buildCommentModeLayout() : _buildPlayerModeLayout(),
-              ),
-            ),
-          ),
-          if (!_showComments)
-            Positioned(
-              top: 50, left: 20,
-              child: IconButton(
-                icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white, size: 36),
-                onPressed: () => ref.read(isPlayerExpandedProvider.notifier).state = false,
-              ),
-            ),
         ],
       ),
     );
   }
 
-  Widget _buildPlayerModeLayout() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const SizedBox(height: 60),
-          AspectRatio(
-            aspectRatio: 1,
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 20, offset: const Offset(0, 10))],
-                image: widget.mediaItem.artUri != null
-                    ? DecorationImage(image: NetworkImage(widget.mediaItem.artUri.toString()), fit: BoxFit.cover)
-                    : null,
-                color: Colors.grey[900],
-              ),
-            ),
-          ),
-          const SizedBox(height: 40),
-          Text(widget.mediaItem.title, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 8),
-          Text(widget.mediaItem.artist ?? "Unknown", textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 18), maxLines: 1, overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 30),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // [UI Change] 좋아요 버튼 + 숫자 표시
-              Column(
-                children: [
-                  IconButton(
-                    icon: Icon(_isLiked ? Icons.favorite : Icons.favorite_border, color: _isLiked ? Colors.redAccent : Colors.white, size: 28),
-                    onPressed: _toggleLike,
-                  ),
-                  Text(
-                      "$_likeCount",
-                      style: TextStyle(color: _isLiked ? Colors.redAccent : Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)
-                  ),
-                ],
-              ),
-
-              StreamBuilder<PlayerState>(
-                stream: KraftAudioService.playerStateStream,
-                builder: (context, snapshot) {
-                  final playing = snapshot.data?.playing ?? false;
-                  return GestureDetector(
-                    onTap: playing ? KraftAudioService.pause : KraftAudioService.resume,
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
-                      child: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.black, size: 40),
-                    ),
-                  );
-                },
-              ),
-
-              // 댓글 버튼
-              Column(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 28),
-                    onPressed: _toggleCommentMode,
-                  ),
-                  const Text("Chat", style: TextStyle(color: Colors.white70, fontSize: 12)),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          _buildProgressBar(),
-          const SizedBox(height: 40),
-        ],
+  Widget _buildTopBar(WidgetRef ref) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: IconButton(
+        icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white, size: 36),
+        onPressed: () => ref.read(isPlayerExpandedProvider.notifier).state = false,
       ),
     );
   }
 
-  Widget _buildCommentModeLayout() {
+  Widget _buildAlbumArt(MediaItem song) {
+    return Container(
+      width: 280, height: 280,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        image: song.artUri != null ? DecorationImage(image: NetworkImage(song.artUri.toString()), fit: BoxFit.cover) : null,
+        boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 20)],
+      ),
+    );
+  }
+
+  Widget _buildSongInfo(MediaItem song) {
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
-                onPressed: _toggleCommentMode,
-              ),
-              const Expanded(
-                child: Text("Comments", textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-              ),
-              const SizedBox(width: 48),
-            ],
-          ),
-        ),
-        Expanded(
-          child: Consumer(
-            builder: (context, ref, _) {
-              final commentsAsync = ref.watch(commentsProvider(widget.mediaItem.id));
-              return commentsAsync.when(
-                data: (comments) {
-                  if (comments.isEmpty) return const Center(child: Text("첫 번째 댓글을 남겨보세요!", style: TextStyle(color: Colors.white54)));
-                  return ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    itemCount: comments.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 16),
-                    itemBuilder: (context, index) => _buildCommentItem(comments[index]),
-                  );
-                },
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, s) => Center(child: Text("Error: $e", style: const TextStyle(color: Colors.red))),
-              );
-            },
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: const Color(0xFF1E1E1E), border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1)))),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _commentController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: "댓글 입력...", hintStyle: TextStyle(color: Colors.grey[400]),
-                    filled: true, fillColor: Colors.black54,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              IconButton(
-                icon: _isSending ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send_rounded, color: Colors.greenAccent),
-                onPressed: _isSending ? null : _submitComment,
-              ),
-            ],
-          ),
-        ),
+        Text(song.title, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        Text(song.artist ?? "Unknown", style: const TextStyle(color: Colors.white70, fontSize: 18)),
       ],
     );
   }
 
-  Widget _buildCommentItem(Map<String, dynamic> c) {
-    final commentId = c['id'] as int;
-    final userId = c['user_id'] as String;
-    final content = c['content'] ?? "";
-    final date = _formatDate(c['created_at']);
-
-    // Join된 데이터 안전하게 추출
-    final userData = c['users'];
-    String name = "익명";
-    int cohort = 0;
-
-    if (userData is Map) {
-      name = userData['name'] ?? "Unknown";
-      cohort = userData['cohort'] ?? 0;
-    }
-
-    final bool canDelete = (_currentUserId == userId) || _isAdmin;
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        CircleAvatar(
-          radius: 18,
-          backgroundColor: Colors.blueGrey,
-          child: Text(name.isNotEmpty ? name[0] : "?", style: const TextStyle(color: Colors.white, fontSize: 12)),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text("$cohort기 $name", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                  if (canDelete)
-                    GestureDetector(
-                      onTap: () => _showDeleteConfirmDialog(commentId),
-                      child: const Icon(Icons.close, color: Colors.white38, size: 16),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(content, style: const TextStyle(color: Colors.white70, fontSize: 14)),
-              const SizedBox(height: 2),
-              Text(date, style: const TextStyle(color: Colors.grey, fontSize: 10)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _showDeleteConfirmDialog(int commentId) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF222222),
-        title: const Text("댓글 삭제", style: TextStyle(color: Colors.white)),
-        content: const Text("정말로 이 댓글을 삭제하시겠습니까?", style: TextStyle(color: Colors.white70)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("취소", style: TextStyle(color: Colors.white54))),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _deleteComment(commentId);
-            },
-            child: const Text("삭제", style: TextStyle(color: Colors.redAccent)),
-          ),
-        ],
-      ),
+  Widget _buildControls() {
+    return StreamBuilder(
+      stream: KraftAudioService.playerStateStream,
+      builder: (context, snapshot) {
+        final isPlaying = snapshot.data?.playing ?? false;
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            IconButton(
+              iconSize: 70,
+              icon: Icon(isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled, color: Colors.white),
+              onPressed: isPlaying ? KraftAudioService.pause : KraftAudioService.resume,
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -436,29 +116,16 @@ class _StreamScreenState extends ConsumerState<StreamScreen> with SingleTickerPr
           stream: KraftAudioService.positionStream,
           builder: (context, snapshot) {
             var position = snapshot.data ?? Duration.zero;
-            if (position > duration) position = duration;
-            return SliderTheme(
-              data: SliderThemeData(trackHeight: 2, activeTrackColor: Colors.white, inactiveTrackColor: Colors.white24, thumbColor: Colors.white, thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6), overlayShape: const RoundSliderOverlayShape(overlayRadius: 14)),
-              child: Slider(
-                value: position.inMilliseconds.toDouble(),
-                max: duration.inMilliseconds.toDouble() > 0 ? duration.inMilliseconds.toDouble() : 1.0,
-                onChanged: (val) => KraftAudioService.seek(Duration(milliseconds: val.toInt())),
-              ),
+            return Slider(
+              activeColor: Colors.white,
+              inactiveColor: Colors.white24,
+              value: position.inMilliseconds.toDouble(),
+              max: duration.inMilliseconds.toDouble() > 0 ? duration.inMilliseconds.toDouble() : 1.0,
+              onChanged: (v) => KraftAudioService.seek(Duration(milliseconds: v.toInt())),
             );
           },
         );
       },
     );
-  }
-
-  String _formatDate(String? dateStr) {
-    if (dateStr == null) return "";
-    final date = DateTime.tryParse(dateStr)?.toLocal() ?? DateTime.now();
-    final now = DateTime.now();
-    final diff = now.difference(date);
-    if (diff.inSeconds < 60) return "방금";
-    if (diff.inMinutes < 60) return "${diff.inMinutes}분 전";
-    if (diff.inHours < 24) return "${diff.inHours}시간 전";
-    return "${date.month}/${date.day}";
   }
 }

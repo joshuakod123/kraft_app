@@ -1,8 +1,7 @@
-// (Imports 부분 생략 - 위와 동일)
+// (Imports 생략 - 기존과 동일하되 player_provider.dart는 필요 없음)
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:just_audio_background/just_audio_background.dart';
 
 import '../../common/layout/main_shell.dart';
 import '../../features/auth/auth_provider.dart';
@@ -13,7 +12,6 @@ import '../../features/curriculum/curriculum_list_screen.dart';
 import '../../features/curriculum/assignment_upload_screen.dart';
 import '../../features/curriculum/curriculum_provider.dart';
 import '../../features/streaming/stream_screen.dart';
-import '../../features/streaming/player_provider.dart'; // [추가] Provider 필요
 import '../../features/splash/splash_screen.dart';
 import '../../features/admin/qr_create_screen.dart';
 import '../../features/attendance/attendance_scan_screen.dart';
@@ -32,7 +30,6 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/splash',
     debugLogDiagnostics: true,
     refreshListenable: authStateListenable,
-    // (redirect 로직은 그대로 유지)
     redirect: (context, state) {
       final status = ref.read(authProvider);
       final goingTo = state.uri.toString();
@@ -46,7 +43,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
       return null;
     },
-
     routes: [
       GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()),
       GoRoute(
@@ -78,26 +74,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/upcoming', pageBuilder: (context, state) => NoTransitionPage(child: const CurriculumListScreen())),
           GoRoute(path: '/team_members', pageBuilder: (context, state) => NoTransitionPage(child: const TeamMemberScreen())),
 
-          // [핵심 수정] 탭 클릭 시 현재 재생 중인 노래 유지
+          // [핵심 수정] 그냥 StreamScreen()만 반환합니다.
+          // Provider가 알아서 재생 중인 곡을 보여줍니다.
           GoRoute(
               path: '/stream',
-              pageBuilder: (context, state) {
-                MediaItem mediaItem;
-                // 1. 다른 화면에서 넘겨준 곡이 있으면 그걸 씀
-                if (state.extra is MediaItem) {
-                  mediaItem = state.extra as MediaItem;
-                } else {
-                  // 2. 없으면(탭 클릭 시) 현재 재생 중인 곡을 가져옴
-                  final currentSong = ref.read(currentSongProvider);
-                  if (currentSong != null) {
-                    mediaItem = currentSong;
-                  } else {
-                    // 3. 재생 중인 것도 없으면 더미 데이터 or 빈 상태
-                    mediaItem = const MediaItem(id: '0', title: '재생 중인 곡 없음', artist: 'KRAFT Music');
-                  }
-                }
-                return NoTransitionPage(child: StreamScreen(mediaItem: mediaItem));
-              }
+              pageBuilder: (context, state) => const NoTransitionPage(child: StreamScreen())
           ),
 
           GoRoute(path: '/profile', pageBuilder: (context, state) => NoTransitionPage(child: const ProfileScreen())),

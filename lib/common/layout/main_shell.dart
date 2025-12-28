@@ -5,9 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/constants/department_enum.dart';
-import '../../core/data/supabase_repository.dart'; // Repository
+import '../../core/data/supabase_repository.dart';
 import '../../core/state/global_providers.dart';
-import '../../features/auth/auth_provider.dart'; // AuthProvider
+import '../../features/auth/auth_provider.dart';
 import '../../features/streaming/mini_player.dart';
 import '../../features/streaming/player_provider.dart';
 import '../../features/streaming/stream_screen.dart';
@@ -24,25 +24,17 @@ class _MainShellState extends ConsumerState<MainShell> {
   @override
   void initState() {
     super.initState();
-    // [New] 앱 실행/재실행 시 체크
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndRedirectIfNeeded();
     });
   }
 
-  // [New] 임시 비밀번호 상태 감지 및 자동 리다이렉트
   Future<void> _checkAndRedirectIfNeeded() async {
-    // 1. 로그인 상태 확인
     final authStatus = ref.read(authProvider);
     if (authStatus != AuthStatus.authenticated) return;
-
-    // 2. 프로필 정보 가져오기
     final profile = await SupabaseRepository().getUserProfile();
-
-    // 3. 임시 비밀번호라면 프로필 페이지로 이동
     if (profile != null && profile['is_temp_password'] == true) {
       if (!mounted) return;
-      // 현재 위치가 이미 profile이 아니라면 이동
       final location = GoRouterState.of(context).uri.toString();
       if (!location.startsWith('/profile')) {
         context.go('/profile');
@@ -52,7 +44,6 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    // [New] Auth 상태가 변할 때마다 체크 (로그인 직후 등)
     ref.listen(authProvider, (previous, next) {
       if (next == AuthStatus.authenticated) {
         _checkAndRedirectIfNeeded();
@@ -66,7 +57,6 @@ class _MainShellState extends ConsumerState<MainShell> {
 
     const double navBarHeight = 80.0;
     const double miniPlayerHeight = 68.0;
-    const double miniPlayerMargin = 12.0;
 
     return PopScope(
       canPop: !isExpanded,
@@ -92,14 +82,17 @@ class _MainShellState extends ConsumerState<MainShell> {
               height: navBarHeight,
               child: _buildGlassNavBar(context, currentIndex),
             ),
+            // [수정] currentSong이 있을 때만 플레이어 표시
             if (currentSong != null)
               AnimatedPositioned(
-                duration: const Duration(milliseconds: 350),
+                duration: const Duration(milliseconds: 300),
                 curve: Curves.fastOutSlowIn,
-                top: isExpanded ? 0 : MediaQuery.of(context).size.height - navBarHeight - miniPlayerHeight - miniPlayerMargin,
-                bottom: isExpanded ? 0 : navBarHeight + miniPlayerMargin,
-                left: isExpanded ? 0 : miniPlayerMargin,
-                right: isExpanded ? 0 : miniPlayerMargin,
+                // 확장되면 전체화면, 아니면 하단 바 위
+                top: isExpanded ? 0 : null,
+                bottom: isExpanded ? 0 : navBarHeight,
+                left: 0,
+                right: 0,
+                height: isExpanded ? null : miniPlayerHeight,
                 child: GestureDetector(
                   onTap: () {
                     if (!isExpanded) {
@@ -109,26 +102,13 @@ class _MainShellState extends ConsumerState<MainShell> {
                   onVerticalDragEnd: (details) {
                     if (isExpanded && details.primaryVelocity! > 500) {
                       ref.read(isPlayerExpandedProvider.notifier).state = false;
-                    } else if (!isExpanded && details.primaryVelocity! < -500) {
-                      ref.read(isPlayerExpandedProvider.notifier).state = true;
                     }
                   },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF121212),
-                      borderRadius: isExpanded ? BorderRadius.zero : BorderRadius.circular(12),
-                      boxShadow: [
-                        if (!isExpanded)
-                          BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 10, offset: const Offset(0, 4))
-                      ],
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 200),
-                      child: isExpanded
-                          ? StreamScreen(mediaItem: currentSong)
-                          : MiniPlayer(song: currentSong),
-                    ),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    child: isExpanded
+                        ? const StreamScreen() // [핵심 수정] 인자값 없이 호출
+                        : const MiniPlayer(),   // [핵심 수정] 인자값 없이 호출
                   ),
                 ),
               ),
@@ -148,10 +128,8 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   Widget _buildGlassNavBar(BuildContext context, int currentIndex) {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.9),
-        border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
-      ),
+      color: Colors.black, // Glass 효과 대신 완전 불투명 블랙으로 변경 (가독성 위해)
+      padding: const EdgeInsets.only(top: 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
@@ -182,10 +160,13 @@ class _NavBarIcon extends ConsumerWidget {
     return GestureDetector(
       onTap: () {
         if (index == 3) {
+          // Stream 탭을 눌렀을 때
           final currentSong = ref.read(currentSongProvider);
           if (currentSong != null) {
+            // 재생 중인 곡이 있으면 플레이어 확장
             ref.read(isPlayerExpandedProvider.notifier).state = true;
           } else {
+            // 없으면 그냥 화면 이동
             context.go(path);
           }
           return;
@@ -194,10 +175,15 @@ class _NavBarIcon extends ConsumerWidget {
       },
       behavior: HitTestBehavior.opaque,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-        child: Icon(icon, color: isSelected ? dept.color : Colors.grey, size: 28)
-            .animate(target: isSelected ? 1 : 0)
-            .scale(begin: const Offset(1, 1), end: const Offset(1.2, 1.2), duration: 200.ms),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: isSelected ? dept.color : Colors.grey, size: 28)
+                .animate(target: isSelected ? 1 : 0)
+                .scale(begin: const Offset(1, 1), end: const Offset(1.2, 1.2), duration: 200.ms),
+          ],
+        ),
       ),
     );
   }

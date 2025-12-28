@@ -310,25 +310,64 @@ class SupabaseRepository {
   Future<void> deleteComment(int commentId) async {
     await _client.from('comments').delete().eq('id', commentId);
   }
+
+  // lib/core/data/supabase_repository.dart
+
+// ... 기존 코드 유지
+
+  // lib/core/data/supabase_repository.dart
+
+// ... 기존 fetchSongs 함수를 아래와 같이 교체하세요
   Future<List<MediaItem>> fetchSongs() async {
-    final List<dynamic> response = await _client
-        .from('songs')
-        .select('*')
-        .order('created_at', ascending: false);
+    try {
+      // 1. DB에서 노래 목록 가져오기
+      final List<dynamic> response = await _client
+          .from('songs')
+          .select('*')
+          .order('created_at', ascending: false);
 
-    return response.map((song) {
-      // iOS 재생을 위해 URL 내 공백/특수문자 인코딩
-      final encodedUrl = Uri.encodeFull(song['file_path'] ?? '');
+      // 2. 데이터가 없으면 빈 리스트 반환
+      if (response.isEmpty) {
+        debugPrint("DB에 노래 데이터가 없습니다.");
+        return [];
+      }
 
-      return MediaItem(
-        id: song['id'].toString(),
-        album: "Kraft Streaming",
-        title: song['title'] ?? '제목 없음',
-        artist: song['artist'] ?? '아티스트 미상',
-        artUri: Uri.parse(song['cover_url'] ?? ''),
-        extras: {'url': encodedUrl}, // 실제 재생 경로를 여기에 저장
-      );
-    }).toList();
+      // 3. MediaItem 리스트로 변환
+      return response.map((song) {
+        // [중요] DB에 저장된 file_path를 실제 재생 가능한 Public URL로 변환
+        // 예: 'music.mp3' -> 'https://project.supabase.co/.../songs/music.mp3'
+        final String rawPath = song['file_path'] ?? '';
+        String audioUrl = rawPath;
+
+        // http로 시작하지 않는 상대 경로라면 Public URL 생성 (버킷 이름 'songs' 가정)
+        if (rawPath.isNotEmpty && !rawPath.startsWith('http')) {
+          audioUrl = _client.storage.from('songs').getPublicUrl(rawPath);
+        }
+
+        // 앨범 커버 URL 처리
+        final String rawCover = song['cover_url'] ?? '';
+        String coverUrl = rawCover;
+        if (rawCover.isNotEmpty && !rawCover.startsWith('http')) {
+          coverUrl = _client.storage.from('songs').getPublicUrl(rawCover);
+        }
+
+        // iOS 등에서 재생 오류 방지를 위해 URL 인코딩 (필요한 경우)
+        // 보통 getPublicUrl이 인코딩된 URL을 주지만, 안전장치로 둡니다.
+        final encodedUrl = Uri.encodeFull(audioUrl);
+
+        return MediaItem(
+          id: song['id'].toString(),
+          album: "Kraft Music",
+          title: song['title'] ?? '제목 없음',
+          artist: song['artist'] ?? '아티스트 미상',
+          artUri: coverUrl.isNotEmpty ? Uri.tryParse(coverUrl) : null,
+          extras: {'url': encodedUrl}, // AudioService가 참조할 실제 URL
+        );
+      }).toList();
+    } catch (e) {
+      debugPrint("fetchSongs 에러: $e");
+      return [];
+    }
   }
   // 4. 좋아요 상태 확인
   Future<bool> isSongLiked(int songId) async {
