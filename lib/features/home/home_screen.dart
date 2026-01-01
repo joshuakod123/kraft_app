@@ -87,13 +87,42 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
             actions: [
-              // [수정] 관리자(임원)일 경우 QR 생성 아이콘 표시
+              // [수정] 관리자(임원)일 경우 메뉴 버튼 표시 (QR 생성 / 명단 확인)
               if (isManager)
-                IconButton(
-                  icon: const Icon(Icons.qr_code_2_rounded, size: 28),
-                  tooltip: '출석 QR 생성',
-                  onPressed: () => context.push('/qr_create'),
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.admin_panel_settings_outlined, size: 28),
+                  tooltip: '임원진 메뉴',
+                  onSelected: (value) {
+                    if (value == 'qr') {
+                      context.push('/qr_create');
+                    } else if (value == 'list') {
+                      context.push('/attendance_list');
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'qr',
+                      child: Row(
+                        children: [
+                          Icon(Icons.qr_code_2, color: Colors.black87),
+                          SizedBox(width: 10),
+                          Text('출석 QR 생성', style: TextStyle(color: Colors.black87)),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'list',
+                      child: Row(
+                        children: [
+                          Icon(Icons.list_alt, color: Colors.black87),
+                          SizedBox(width: 10),
+                          Text('출석 명단 확인', style: TextStyle(color: Colors.black87)),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
+
               // 일반 회원용 QR 스캔 아이콘
               IconButton(icon: const Icon(Icons.qr_code_scanner), onPressed: () => context.push('/attendance_scan')),
               const SizedBox(width: 8),

@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 
 class SupabaseRepository {
+  // Supabase 클라이언트 인스턴스 (여기서는 _client라고 정의됨)
   final SupabaseClient _client = Supabase.instance.client;
 
   User? get currentUser => _client.auth.currentUser;
@@ -38,10 +39,7 @@ class SupabaseRepository {
         'p_name': name,
         'p_phone': phone,
       });
-
       if (response == null) return null;
-
-      // JSON 객체를 Map으로 반환 {'password': '...', 'team_id': 1}
       return Map<String, dynamic>.from(response);
     } catch (e) {
       debugPrint("Temp Password Error: $e");
@@ -57,7 +55,6 @@ class SupabaseRepository {
       final user = _client.auth.currentUser;
       if (user == null || user.email == null) return '로그인이 필요합니다.';
 
-      // 1. 기존 비밀번호 검증
       final authResponse = await _client.auth.signInWithPassword(
         email: user.email!,
         password: currentPassword,
@@ -67,14 +64,8 @@ class SupabaseRepository {
         return '기존 비밀번호가 일치하지 않습니다.';
       }
 
-      // 2. 새 비밀번호 업데이트
-      await _client.auth.updateUser(
-        UserAttributes(password: newPassword),
-      );
-      // [New] 3. 임시 비밀번호 상태 해제 (is_temp_password = false)
-      await _client.from('users').update({
-        'is_temp_password': false
-      }).eq('id', user.id);
+      await _client.auth.updateUser(UserAttributes(password: newPassword));
+      await _client.from('users').update({'is_temp_password': false}).eq('id', user.id);
 
       return null;
     } catch (e) {
@@ -84,6 +75,7 @@ class SupabaseRepository {
       return '비밀번호 변경 중 오류가 발생했습니다.';
     }
   }
+
   Future<Map<String, dynamic>?> getUserProfile() async {
     try {
       final userId = _client.auth.currentUser?.id;
@@ -132,7 +124,6 @@ class SupabaseRepository {
     }
   }
 
-  // [New] 임원진 여부 확인 (삭제 권한용)
   Future<bool> isAdmin() async {
     try {
       final userId = _client.auth.currentUser?.id;
@@ -145,7 +136,6 @@ class SupabaseRepository {
           .maybeSingle();
 
       if (data == null) return false;
-
       final role = data['role'] as String?;
       return role == 'admin' || role == 'manager' || role == 'executive';
     } catch (e) {
@@ -278,7 +268,6 @@ class SupabaseRepository {
 
   // --- [Music Social Features] ---
 
-  // 1. 댓글 작성
   Future<void> addComment(int songId, String content) async {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception("로그인이 필요합니다.");
@@ -290,15 +279,13 @@ class SupabaseRepository {
     });
   }
 
-  // 2. 댓글 가져오기 (Users 테이블 JOIN)
   Future<List<Map<String, dynamic>>> fetchComments(int songId) async {
     try {
       final response = await _client
           .from('comments')
-          .select('*, users(name, cohort)') // users 테이블의 name, cohort 필드 로드
+          .select('*, users(name, cohort)')
           .eq('song_id', songId)
           .order('created_at', ascending: false);
-
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       debugPrint("Fetch Comments Error: $e");
@@ -306,53 +293,36 @@ class SupabaseRepository {
     }
   }
 
-  // 3. 댓글 삭제
   Future<void> deleteComment(int commentId) async {
     await _client.from('comments').delete().eq('id', commentId);
   }
 
-  // lib/core/data/supabase_repository.dart
-
-// ... 기존 코드 유지
-
-  // lib/core/data/supabase_repository.dart
-
-// ... 기존 fetchSongs 함수를 아래와 같이 교체하세요
   Future<List<MediaItem>> fetchSongs() async {
     try {
-      // 1. DB에서 노래 목록 가져오기
       final List<dynamic> response = await _client
           .from('songs')
           .select('*')
           .order('created_at', ascending: false);
 
-      // 2. 데이터가 없으면 빈 리스트 반환
       if (response.isEmpty) {
-        debugPrint("DB에 노래 데이터가 없습니다.");
+        debugPrint("데이터 없음: Supabase Table에 노래 정보가 없습니다.");
         return [];
       }
 
-      // 3. MediaItem 리스트로 변환
       return response.map((song) {
-        // [중요] DB에 저장된 file_path를 실제 재생 가능한 Public URL로 변환
-        // 예: 'music.mp3' -> 'https://project.supabase.co/.../songs/music.mp3'
         final String rawPath = song['file_path'] ?? '';
-        String audioUrl = rawPath;
+        final String rawCover = song['cover_url'] ?? '';
 
-        // http로 시작하지 않는 상대 경로라면 Public URL 생성 (버킷 이름 'songs' 가정)
+        String audioUrl = rawPath;
         if (rawPath.isNotEmpty && !rawPath.startsWith('http')) {
           audioUrl = _client.storage.from('songs').getPublicUrl(rawPath);
         }
 
-        // 앨범 커버 URL 처리
-        final String rawCover = song['cover_url'] ?? '';
         String coverUrl = rawCover;
         if (rawCover.isNotEmpty && !rawCover.startsWith('http')) {
           coverUrl = _client.storage.from('songs').getPublicUrl(rawCover);
         }
 
-        // iOS 등에서 재생 오류 방지를 위해 URL 인코딩 (필요한 경우)
-        // 보통 getPublicUrl이 인코딩된 URL을 주지만, 안전장치로 둡니다.
         final encodedUrl = Uri.encodeFull(audioUrl);
 
         return MediaItem(
@@ -361,15 +331,15 @@ class SupabaseRepository {
           title: song['title'] ?? '제목 없음',
           artist: song['artist'] ?? '아티스트 미상',
           artUri: coverUrl.isNotEmpty ? Uri.tryParse(coverUrl) : null,
-          extras: {'url': encodedUrl}, // AudioService가 참조할 실제 URL
+          extras: {'url': encodedUrl},
         );
       }).toList();
     } catch (e) {
-      debugPrint("fetchSongs 에러: $e");
+      debugPrint("fetchSongs Error: $e");
       return [];
     }
   }
-  // 4. 좋아요 상태 확인
+
   Future<bool> isSongLiked(int songId) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return false;
@@ -386,22 +356,18 @@ class SupabaseRepository {
     }
   }
 
-  // 5. 좋아요 갯수 가져오기
   Future<int> getSongLikeCount(int songId) async {
     try {
       final count = await _client
           .from('song_likes')
           .count(CountOption.exact)
           .eq('song_id', songId);
-
       return count;
     } catch (e) {
-      debugPrint("Like Count Error: $e");
       return 0;
     }
   }
 
-  // 6. 좋아요 토글
   Future<bool> toggleSongLike(int songId) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return false;
@@ -460,15 +426,32 @@ class SupabaseRepository {
     }
   }
 
-  Future<bool> uploadAssignment(int curriculumId) async {
-    return false;
+  Future<bool> uploadAssignment(int curriculumId) async { return false; }
+
+  // [수정 완료: 출석 체크 함수]
+  Future<void> markAttendance(String qrData) async {
+    // supabase -> _client로 수정
+    final user = _client.auth.currentUser;
+    if (user == null) {
+      throw Exception('로그인 상태가 아닙니다.');
+    }
+
+    try {
+      // supabase -> _client로 수정
+      await _client.from('attendance').insert({
+        'user_id': user.id,
+        'session_id': qrData,
+      });
+    } on PostgrestException catch (e) {
+      // 중복 출석 에러 코드 처리
+      if (e.code == '23505') {
+        throw Exception('이미 출석 처리되었습니다.');
+      }
+      rethrow;
+    } catch (e) {
+      rethrow;
+    }
   }
 
-  Future<bool> markAttendance(String qrData) async {
-    return true;
-  }
-
-  Future<List<Map<String, dynamic>>> getTracks(int teamId) async {
-    return [];
-  }
+  Future<List<Map<String, dynamic>>> getTracks(int teamId) async { return []; }
 }

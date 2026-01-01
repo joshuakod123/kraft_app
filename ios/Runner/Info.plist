@@ -6,7 +6,7 @@
     <false/>
 
     <key>NSCameraUsageDescription</key>
-    <string>QR 출석 체크를 위해 카메라 접근이 필요합니다.</string>
+    <string>출석 QR 코드 스캔을 위해 카메라 권한이 필요합니다.</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>과제 제출을 위해 갤러리 접근이 필요합니다.</string>
     <key>NSMicrophoneUsageDescription</key>

@@ -1,4 +1,3 @@
-// lib/features/streaming/audio_service.dart
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 
@@ -12,7 +11,19 @@ class KraftAudioService {
   static Future<void> playMediaItem(MediaItem item) async {
     try {
       final url = item.extras?['url'] ?? '';
-      if (url.isEmpty) return;
+      if (url.isEmpty) {
+        print("재생 URL이 없습니다.");
+        return;
+      }
+
+      // 기존 소스와 같으면 재생만 수행 (끊김 방지)
+      if (_player.audioSource != null && _player.audioSource is UriAudioSource) {
+        final currentUri = (_player.audioSource as UriAudioSource).uri;
+        if (currentUri.toString() == url) {
+          if (!_player.playing) _player.play();
+          return;
+        }
+      }
 
       await _player.setAudioSource(
         AudioSource.uri(
@@ -22,7 +33,7 @@ class KraftAudioService {
       );
       _player.play();
     } catch (e) {
-      print("재생 에러: $e");
+      print("재생 중 오류 발생: $e");
     }
   }
 
