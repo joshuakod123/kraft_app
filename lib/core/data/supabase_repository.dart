@@ -1,9 +1,10 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:just_audio_background/just_audio_background.dart';
+import 'package:path_provider/path_provider.dart';
 
 class SupabaseRepository {
-  // Supabase 클라이언트 인스턴스 (여기서는 _client라고 정의됨)
   final SupabaseClient _client = Supabase.instance.client;
 
   User? get currentUser => _client.auth.currentUser;
@@ -152,20 +153,42 @@ class SupabaseRepository {
         .order('event_date', ascending: true);
   }
 
-  Future<bool> addCurriculum(String title, String desc, DateTime date, DateTime? endTime, int teamId) async {
+  Future<bool> addCurriculum({
+    required String title,
+    required String description,
+    required DateTime date,
+    required int weekNumber,
+    int? teamId,
+  }) async {
     try {
       await _client.from('curriculums').insert({
         'title': title,
-        'description': desc,
-        'week_number': 0,
-        'team_id': teamId,
+        'description': description,
+        'week_number': weekNumber,
+        'team_id': teamId ?? 1,
         'event_date': date.toIso8601String(),
-        'end_time': endTime?.toIso8601String(),
         'semester_id': 1,
       });
       return true;
     } catch (e) {
+      debugPrint("Add Curriculum Error: $e");
       return false;
+    }
+  }
+
+  Future<List<String>> getSessionOptions() async {
+    try {
+      final response = await _client
+          .from('curriculums')
+          .select('title')
+          .order('event_date', ascending: false)
+          .limit(20);
+
+      final List<dynamic> data = response;
+      return data.map((e) => e['title'] as String).toSet().toList();
+    } catch (e) {
+      debugPrint("Error fetching sessions: $e");
+      return [];
     }
   }
 
@@ -239,30 +262,75 @@ class SupabaseRepository {
     }
   }
 
-  // --- Archives ---
-  Stream<List<Map<String, dynamic>>> getMyArchivesStream() {
+  // ==========================================================
+  // [Archives] 로컬 저장 + 삭제 기능 추가됨
+  // ==========================================================
+
+  // 1. 내 아카이브 목록 조회
+  Future<List<Map<String, dynamic>>> fetchMyArchives() async {
     final userId = _client.auth.currentUser?.id;
-    if (userId == null) return const Stream.empty();
-    return _client
-        .from('archives')
-        .stream(primaryKey: ['id'])
-        .eq('user_id', userId)
-        .order('created_at', ascending: false);
+    if (userId == null) return [];
+
+    try {
+      final data = await _client
+          .from('archives')
+          .select()
+          .eq('user_id', userId)
+          .order('created_at', ascending: false);
+      return List<Map<String, dynamic>>.from(data);
+    } catch (e) {
+      debugPrint("Archive Fetch Error: $e");
+      return [];
+    }
   }
 
-  Future<void> addArchive(String title, String description, String fileUrl) async {
+  // 2. 아카이브 저장 (로컬 + DB)
+  Future<void> saveArchiveLocally({
+    required String title,
+    required String description,
+    required File file,
+    required String fileName,
+  }) async {
     try {
-      final userId = _client.auth.currentUser?.id;
-      if (userId == null) return;
+      final user = _client.auth.currentUser;
+      if (user == null) throw Exception('로그인이 필요합니다.');
+
+      final directory = await getApplicationDocumentsDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final uniqueFileName = '${timestamp}_$fileName';
+      final savePath = '${directory.path}/$uniqueFileName';
+
+      await file.copy(savePath);
+
+      final fileExtension = fileName.split('.').last;
       await _client.from('archives').insert({
-        'user_id': userId,
+        'user_id': user.id,
         'title': title,
         'description': description,
-        'file_url': fileUrl,
-        'file_type': 'image',
+        'file_path': uniqueFileName,
+        'file_type': fileExtension,
       });
     } catch (e) {
-      debugPrint("Add Archive Error: $e");
+      throw Exception('저장 실패: $e');
+    }
+  }
+
+  // 3. [추가됨] 아카이브 삭제 (DB + 로컬 파일)
+  Future<void> deleteArchive(int id, String fileName) async {
+    try {
+      // 1. DB에서 삭제
+      await _client.from('archives').delete().eq('id', id);
+
+      // 2. 로컬 파일 삭제
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/$fileName');
+
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (e) {
+      debugPrint("Delete Error: $e");
+      throw Exception('삭제 실패: $e');
     }
   }
 
@@ -288,7 +356,6 @@ class SupabaseRepository {
           .order('created_at', ascending: false);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      debugPrint("Fetch Comments Error: $e");
       return [];
     }
   }
@@ -304,10 +371,7 @@ class SupabaseRepository {
           .select('*')
           .order('created_at', ascending: false);
 
-      if (response.isEmpty) {
-        debugPrint("데이터 없음: Supabase Table에 노래 정보가 없습니다.");
-        return [];
-      }
+      if (response.isEmpty) return [];
 
       return response.map((song) {
         final String rawPath = song['file_path'] ?? '';
@@ -335,7 +399,6 @@ class SupabaseRepository {
         );
       }).toList();
     } catch (e) {
-      debugPrint("fetchSongs Error: $e");
       return [];
     }
   }
@@ -428,24 +491,24 @@ class SupabaseRepository {
 
   Future<bool> uploadAssignment(int curriculumId) async { return false; }
 
-  // [수정 완료: 출석 체크 함수]
-  Future<void> markAttendance(String qrData) async {
-    // supabase -> _client로 수정
+  Future<void> markAttendance({
+    required String sessionName,
+    required String teamName,
+  }) async {
     final user = _client.auth.currentUser;
     if (user == null) {
       throw Exception('로그인 상태가 아닙니다.');
     }
 
     try {
-      // supabase -> _client로 수정
       await _client.from('attendance').insert({
         'user_id': user.id,
-        'session_id': qrData,
+        'session_name': sessionName,
+        'team_name': teamName,
       });
     } on PostgrestException catch (e) {
-      // 중복 출석 에러 코드 처리
       if (e.code == '23505') {
-        throw Exception('이미 출석 처리되었습니다.');
+        throw Exception('이미 출석 처리된 세션입니다.');
       }
       rethrow;
     } catch (e) {

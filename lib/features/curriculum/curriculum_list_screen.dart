@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 // [Provider 및 Enum 연결]
 import '../../core/constants/department_enum.dart';
 import '../../core/state/global_providers.dart';
+import '../../core/data/supabase_repository.dart'; // Repository 추가
 
 class CurriculumListScreen extends ConsumerStatefulWidget {
   const CurriculumListScreen({super.key});
@@ -18,11 +19,13 @@ class CurriculumListScreen extends ConsumerStatefulWidget {
 
 class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
   final _supabase = Supabase.instance.client;
+  final SupabaseRepository _repository = SupabaseRepository(); // Repository 인스턴스
 
   CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
 
+  // 이벤트 데이터 (개인 일정 + 공식 커리큘럼 통합)
   Map<DateTime, List<Map<String, dynamic>>> _events = {};
 
   @override
@@ -30,47 +33,68 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
     super.initState();
     _selectedDay = _focusedDay;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _fetchSchedules();
+      _fetchAllEvents(); // 이름 변경: fetchSchedules -> fetchAllEvents
     });
   }
 
   // --------------------------------------------------------
-  // 1. 데이터 로직
+  // 1. 데이터 로직 (개인 + 공식 통합)
   // --------------------------------------------------------
-  Future<void> _fetchSchedules() async {
+  Future<void> _fetchAllEvents() async {
     try {
       final myDept = ref.read(currentDeptProvider);
       final myUserId = _supabase.auth.currentUser?.id;
 
-      final response = await _supabase
-          .from('schedules')
+      // 1. 개인 일정 가져오기 (schedules 테이블)
+      final schedulesResponse = await _supabase
+          .from('schedules') // SQL 테이블명 확인 (personal_schedules or schedules)
           .select()
+          .eq('user_id', myUserId ?? '')
           .order('start_time', ascending: true);
 
-      final data = response as List<dynamic>;
+      // 2. 공식 커리큘럼 가져오기 (curriculums 테이블)
+      // 팀 ID가 1번(전체)이거나 본인 팀인 경우 등 로직에 맞게 조정
+      final curriculumsResponse = await _supabase
+          .from('curriculums')
+          .select()
+          .order('event_date', ascending: true);
+
       Map<DateTime, List<Map<String, dynamic>>> newEvents = {};
 
-      for (var item in data) {
-        final String? itemDept = item['department'];
-        final String? itemUserId = item['user_id'];
-        final bool isOfficial = item['is_official'] ?? false;
+      // [데이터 병합 로직]
 
-        bool show = false;
-        if (itemUserId == myUserId) {
-          show = true;
-        } else if (isOfficial && itemDept == myDept.name) {
-          show = true;
-        }
+      // A. 개인 일정 처리
+      for (var item in schedulesResponse) {
+        final DateTime startDate = DateTime.parse(item['start_time']).toLocal();
+        final DateTime dateKey = DateTime.utc(startDate.year, startDate.month, startDate.day);
 
-        if (!show) continue;
+        if (newEvents[dateKey] == null) newEvents[dateKey] = [];
 
-        DateTime startDate = DateTime.parse(item['start_time']).toLocal();
-        DateTime dateKey = DateTime(startDate.year, startDate.month, startDate.day);
+        // UI에 맞게 데이터 가공
+        newEvents[dateKey]!.add({
+          ...item,
+          'type': 'personal',
+          'is_official': false,
+        });
+      }
 
-        if (newEvents[dateKey] == null) {
-          newEvents[dateKey] = [];
-        }
-        newEvents[dateKey]!.add(item);
+      // B. 공식 커리큘럼 처리
+      for (var item in curriculumsResponse) {
+        final DateTime eventDate = DateTime.parse(item['event_date']).toLocal();
+        final DateTime dateKey = DateTime.utc(eventDate.year, eventDate.month, eventDate.day);
+
+        if (newEvents[dateKey] == null) newEvents[dateKey] = [];
+
+        newEvents[dateKey]!.add({
+          'id': item['id'],
+          'title': item['title'],
+          'description': item['description'],
+          'start_time': item['event_date'], // UI 호환성을 위해 키 매핑
+          'end_time': item['end_time'] ?? item['event_date'],
+          'type': 'official',
+          'is_official': true, // 공식 일정 플래그
+          'week_number': item['week_number'],
+        });
       }
 
       if (mounted) {
@@ -79,70 +103,87 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
         });
       }
     } catch (e) {
-      debugPrint('Error fetching schedules: $e');
+      debugPrint('Error fetching events: $e');
     }
   }
 
   List<Map<String, dynamic>> _getEventsForDay(DateTime day) {
-    return _events[DateTime(day.year, day.month, day.day)] ?? [];
+    // UTC로 변환하여 Key 조회 (시간 오차 방지)
+    return _events[DateTime.utc(day.year, day.month, day.day)] ?? [];
   }
 
-  Future<void> _addSchedule({
+  // 개인 일정 추가
+  Future<void> _addPersonalSchedule({
     required String title,
     required String description,
     required DateTime startTime,
     required DateTime endTime,
-    required bool isOfficial,
   }) async {
     final myDept = ref.read(currentDeptProvider);
-
     try {
       await _supabase.from('schedules').insert({
         'title': title,
         'description': description,
         'start_time': startTime.toIso8601String(),
         'end_time': endTime.toIso8601String(),
-        'is_official': isOfficial,
+        'is_official': false,
         'department': myDept.name,
         'user_id': _supabase.auth.currentUser?.id,
       });
 
-      await _fetchSchedules();
-
-      if (mounted) {
-        // [수정] 스낵바 대신 팝업 호출
-        _showPopup(context, "성공", "일정이 추가되었습니다!", myDept.color);
-      }
+      await _fetchAllEvents();
+      if (mounted) _showPopup(context, "성공", "개인 일정이 추가되었습니다!", myDept.color);
     } catch (e) {
-      debugPrint('Error adding schedule: $e');
-      if (mounted) {
-        _showPopup(context, "오류", "일정 추가에 실패했습니다.\n$e", Colors.redAccent, isError: true);
-      }
+      if (mounted) _showPopup(context, "오류", "일정 추가 실패: $e", Colors.redAccent, isError: true);
     }
   }
 
-  Future<void> _deleteSchedule(int id, bool isOfficial, bool isManager) async {
+  // 공식 커리큘럼 추가 (임원용)
+  Future<void> _addOfficialCurriculum({
+    required String title,
+    required String description,
+    required int weekNumber,
+    required DateTime date,
+  }) async {
+    try {
+      // Repository 함수 사용 (SQL 로직 분리)
+      await _repository.addCurriculum(
+        title: title,
+        description: description,
+        date: date,
+        weekNumber: weekNumber,
+        teamId: 1, // 전체 공통이면 1, 팀별이면 currentDept.id 등 사용
+      );
+
+      await _fetchAllEvents();
+      if (mounted) _showPopup(context, "성공", "공식 세션이 등록되었습니다.\nQR 코드 목록에도 추가됩니다.", Colors.orangeAccent);
+    } catch (e) {
+      if (mounted) _showPopup(context, "오류", "세션 등록 실패: $e", Colors.redAccent, isError: true);
+    }
+  }
+
+  Future<void> _deleteItem(int id, bool isOfficial, bool isManager) async {
     if (isOfficial && !isManager) {
       _showPopup(context, "권한 없음", "공식 일정은 임원만 삭제할 수 있습니다.", Colors.redAccent, isError: true);
       return;
     }
 
     try {
-      await _supabase.from('schedules').delete().eq('id', id);
-      await _fetchSchedules();
-      if (mounted) {
-        _showPopup(context, "삭제 완료", "일정이 삭제되었습니다.", Colors.greenAccent);
+      if (isOfficial) {
+        await _supabase.from('curriculums').delete().eq('id', id);
+      } else {
+        await _supabase.from('schedules').delete().eq('id', id);
       }
+
+      await _fetchAllEvents();
+      if (mounted) _showPopup(context, "삭제 완료", "일정이 삭제되었습니다.", Colors.greenAccent);
     } catch (e) {
-      debugPrint('Delete Error: $e');
-      if (mounted) {
-        _showPopup(context, "오류", "삭제에 실패했습니다.", Colors.redAccent, isError: true);
-      }
+      if (mounted) _showPopup(context, "오류", "삭제 실패: $e", Colors.redAccent, isError: true);
     }
   }
 
   // --------------------------------------------------------
-  // 2. UI 빌드
+  // 2. UI 빌드 (기존 디자인 유지)
   // --------------------------------------------------------
   @override
   Widget build(BuildContext context) {
@@ -169,7 +210,7 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
-            onPressed: _fetchSchedules,
+            onPressed: _fetchAllEvents,
           ),
         ],
       ),
@@ -284,7 +325,7 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                     final event = dailyEvents[index];
                     final bool isOfficial = event['is_official'] ?? false;
                     final int id = event['id'];
-                    final bool canDelete = isManager || !isOfficial;
+                    final bool canDelete = isManager || !isOfficial; // 임원만 공식 삭제 가능, 내 개인일정은 삭제 가능
 
                     final bool isFirst = index == 0;
                     final bool isLast = index == dailyEvents.length - 1;
@@ -378,7 +419,7 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                                                   borderRadius: BorderRadius.circular(8),
                                                   border: Border.all(color: const Color(0xFFFFD700).withOpacity(0.5)),
                                                 ),
-                                                child: const Text("공식 일정", style: TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold)),
+                                                child: const Text("공식", style: TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold)),
                                               ),
                                             if (canDelete)
                                               GestureDetector(
@@ -388,16 +429,18 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                                           ],
                                         ),
                                         const SizedBox(height: 6),
-                                        Row(
-                                          children: [
-                                            Icon(Icons.access_time_rounded, size: 14, color: Colors.white.withOpacity(0.5)),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              _formatTimeRange(event['start_time'], event['end_time']),
-                                              style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13),
-                                            ),
-                                          ],
-                                        ),
+                                        // 시간 표시 (공식 일정은 시간 정보가 없을 수도 있음)
+                                        if (event['start_time'] != null)
+                                          Row(
+                                            children: [
+                                              Icon(Icons.access_time_rounded, size: 14, color: Colors.white.withOpacity(0.5)),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                _formatTimeRange(event['start_time'], event['end_time']),
+                                                style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13),
+                                              ),
+                                            ],
+                                          ),
                                         if (event['description'] != null && event['description'].toString().isNotEmpty)
                                           Padding(
                                             padding: const EdgeInsets.only(top: 8.0),
@@ -425,8 +468,9 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
           ),
         ),
       ),
+      // [수정] FAB 클릭 시 핸들러 변경
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddScheduleSheet(context, themeColor, isManager),
+        onPressed: () => _handleFabClick(context, themeColor, isManager),
         backgroundColor: themeColor,
         child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
       ),
@@ -434,17 +478,256 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
   }
 
   String _formatTimeRange(String? start, String? end) {
-    if (start == null || end == null) return '';
+    if (start == null) return '';
     final s = DateTime.parse(start).toLocal();
-    final e = DateTime.parse(end).toLocal();
+    final e = end != null ? DateTime.parse(end).toLocal() : s;
+
+    // 시간이 00:00이면 날짜만 표시하거나 생략하는 로직 등 커스텀 가능
     return "${DateFormat('HH:mm').format(s)} - ${DateFormat('HH:mm').format(e)}";
   }
 
   // --------------------------------------------------------
-  // 3. 팝업 & 다이얼로그 (한국어 적용)
+  // 3. 팝업 & 다이얼로그 (로직 추가됨)
   // --------------------------------------------------------
 
-  // [NEW] 중앙 팝업 알림 (스낵바 대체)
+  // [NEW] FAB 클릭 시 분기 처리
+  void _handleFabClick(BuildContext context, Color themeColor, bool isManager) {
+    if (isManager) {
+      // 임원은 선택지 보여주기
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        builder: (context) => Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF1E1E1E),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 24),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: themeColor.withOpacity(0.2), shape: BoxShape.circle),
+                  child: Icon(Icons.person, color: themeColor),
+                ),
+                title: const Text('개인 일정 추가', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                subtitle: const Text('나만 볼 수 있는 일정입니다.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showAddPersonalScheduleSheet(context, themeColor);
+                },
+              ),
+              const Divider(color: Colors.white10),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: Colors.orangeAccent.withOpacity(0.2), shape: BoxShape.circle),
+                  child: const Icon(Icons.school, color: Colors.orangeAccent),
+                ),
+                title: const Text('공식 세션(커리큘럼) 추가', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                subtitle: const Text('모든 부원에게 보이며, QR 출석 목록에 추가됩니다.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showAddOfficialCurriculumSheet(context);
+                },
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+      );
+    } else {
+      // 일반 부원은 바로 개인 일정 추가
+      _showAddPersonalScheduleSheet(context, themeColor);
+    }
+  }
+
+  // [개인 일정 추가 시트]
+  void _showAddPersonalScheduleSheet(BuildContext context, Color themeColor) {
+    DateTime now = DateTime.now();
+    DateTime inputDate = _selectedDay ?? now;
+    TimeOfDay startTime = TimeOfDay(hour: now.hour + 1, minute: 0);
+    TimeOfDay endTime = TimeOfDay(hour: now.hour + 2, minute: 0);
+
+    final titleController = TextEditingController();
+    final descController = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
+            return Padding(
+              padding: EdgeInsets.only(bottom: bottomPadding),
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E1E1E).withOpacity(0.9),
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+                      border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+                        const SizedBox(height: 24),
+                        Text("새 일정 추가 (개인)", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                        const SizedBox(height: 20),
+                        _buildTextField(titleController, "제목", Icons.title, themeColor),
+                        const SizedBox(height: 16),
+                        _buildTextField(descController, "설명 (선택사항)", Icons.description_outlined, themeColor, maxLines: 2),
+                        const SizedBox(height: 20),
+                        Row(
+                          children: [
+                            Expanded(child: _buildTimePickerButton(context, "시작", startTime, themeColor, () async {
+                              final time = await showTimePicker(context: context, initialTime: startTime);
+                              if (time != null) setSheetState(() => startTime = time);
+                            })),
+                            const SizedBox(width: 12),
+                            Icon(Icons.arrow_forward_rounded, color: Colors.white.withOpacity(0.2)),
+                            const SizedBox(width: 12),
+                            Expanded(child: _buildTimePickerButton(context, "종료", endTime, themeColor, () async {
+                              final time = await showTimePicker(context: context, initialTime: endTime);
+                              if (time != null) setSheetState(() => endTime = time);
+                            })),
+                          ],
+                        ),
+                        const SizedBox(height: 30),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 56,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              if (titleController.text.isNotEmpty) {
+                                final startDateTime = DateTime(inputDate.year, inputDate.month, inputDate.day, startTime.hour, startTime.minute);
+                                final endDateTime = DateTime(inputDate.year, inputDate.month, inputDate.day, endTime.hour, endTime.minute);
+                                _addPersonalSchedule(title: titleController.text, description: descController.text, startTime: startDateTime, endTime: endDateTime);
+                                Navigator.pop(context);
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(backgroundColor: themeColor, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 0),
+                            child: const Text("일정 생성", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // [공식 커리큘럼 추가 시트]
+  void _showAddOfficialCurriculumSheet(BuildContext context) {
+    final DateTime inputDate = _selectedDay ?? DateTime.now();
+    final titleController = TextEditingController(); // 예: 1주차 세션
+    final weekController = TextEditingController(); // 예: 1
+    final descController = TextEditingController();
+
+    const Color officialColor = Colors.orangeAccent;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
+            return Padding(
+              padding: EdgeInsets.only(bottom: bottomPadding),
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E1E1E).withOpacity(0.9),
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+                      border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+                        const SizedBox(height: 24),
+                        const Text("공식 세션 등록", style: TextStyle(color: officialColor, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                        const SizedBox(height: 4),
+                        const Text("이 세션은 QR 출석 목록에 자동으로 추가됩니다.", style: TextStyle(color: Colors.white54, fontSize: 12)),
+                        const SizedBox(height: 20),
+
+                        _buildTextField(titleController, "세션 이름 (예: 1주차 세션)", Icons.school, officialColor),
+                        const SizedBox(height: 16),
+                        _buildTextField(weekController, "주차 (숫자만 입력)", Icons.calendar_today, officialColor),
+                        const SizedBox(height: 16),
+                        _buildTextField(descController, "설명 / 공지사항", Icons.description_outlined, officialColor, maxLines: 3),
+
+                        const SizedBox(height: 20),
+                        Row(
+                          children: [
+                            const Icon(Icons.event_available, color: Colors.white70, size: 20),
+                            const SizedBox(width: 10),
+                            Text(
+                              "날짜: ${DateFormat('yyyy년 M월 d일 (E)', 'ko_KR').format(inputDate)}",
+                              style: const TextStyle(color: Colors.white, fontSize: 16),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 30),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 56,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              if (titleController.text.isNotEmpty && weekController.text.isNotEmpty) {
+                                final int week = int.tryParse(weekController.text) ?? 0;
+                                _addOfficialCurriculum(
+                                  title: titleController.text,
+                                  description: descController.text,
+                                  weekNumber: week,
+                                  date: inputDate,
+                                );
+                                Navigator.pop(context);
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(backgroundColor: officialColor, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 0),
+                            child: const Text("공식 세션 생성", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // 팝업 알림 (Glass Effect)
   void _showPopup(BuildContext context, String title, String message, Color themeColor, {bool isError = false}) {
     showDialog(
       context: context,
@@ -491,6 +774,57 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
     );
   }
 
+  // 삭제 확인 팝업
+  void _showDeleteConfirmDialog(BuildContext context, int id, bool isOfficial, bool isManager) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.delete_forever_rounded, color: Colors.redAccent, size: 48),
+              const SizedBox(height: 16),
+              const Text("일정 삭제", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text(
+                isOfficial
+                    ? "공식 세션입니다. 정말 삭제하시겠습니까?\n모든 부원의 캘린더에서 사라집니다."
+                    : "정말 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 14),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text("취소", style: TextStyle(color: Colors.white.withOpacity(0.5))),
+                    ),
+                  ),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _deleteItem(id, isOfficial, isManager);
+                      },
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                      child: const Text("삭제"),
+                    ),
+                  ),
+                ],
+              )
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   // 상세 보기 팝업
   void _showDetailDialog(BuildContext context, Map<String, dynamic> event, Color themeColor, bool isManager, bool canDelete) {
     final bool isOfficial = event['is_official'] ?? false;
@@ -519,7 +853,7 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                         ),
                       ),
                       child: Text(
-                        isOfficial ? "공식 일정" : "개인 일정",
+                        isOfficial ? "OFFICIAL" : "PERSONAL",
                         style: TextStyle(
                           color: isOfficial ? const Color(0xFFFFD700) : themeColor,
                           fontWeight: FontWeight.bold,
@@ -542,11 +876,10 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    const Icon(Icons.access_time, color: Colors.white70, size: 16),
+                    const Icon(Icons.calendar_today, color: Colors.white70, size: 16),
                     const SizedBox(width: 8),
                     Text(
-                      "${DateFormat('yyyy.MM.dd (E)').format(DateTime.parse(event['start_time']).toLocal())}   " +
-                          _formatTimeRange(event['start_time'], event['end_time']),
+                      DateFormat('yyyy.MM.dd (E)', 'ko_KR').format(DateTime.parse(event['start_time']).toLocal()),
                       style: const TextStyle(color: Colors.white70, fontSize: 15),
                     ),
                   ],
@@ -589,161 +922,6 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
           ),
         );
       },
-    );
-  }
-
-  void _showAddScheduleSheet(BuildContext context, Color themeColor, bool isManager) {
-    DateTime now = DateTime.now();
-    DateTime inputDate = _selectedDay ?? now;
-    TimeOfDay startTime = TimeOfDay(hour: now.hour + 1, minute: 0);
-    TimeOfDay endTime = TimeOfDay(hour: now.hour + 2, minute: 0);
-
-    final titleController = TextEditingController();
-    final descController = TextEditingController();
-    bool isOfficial = false;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
-            return Padding(
-              padding: EdgeInsets.only(bottom: bottomPadding),
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                  child: Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E1E1E).withOpacity(0.9),
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-                      border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
-                        const SizedBox(height: 24),
-                        Text("새 일정 추가", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                        const SizedBox(height: 20),
-                        _buildTextField(titleController, "제목", Icons.title, themeColor),
-                        const SizedBox(height: 16),
-                        _buildTextField(descController, "설명 (선택사항)", Icons.description_outlined, themeColor, maxLines: 2),
-                        const SizedBox(height: 20),
-                        Row(
-                          children: [
-                            Expanded(child: _buildTimePickerButton(context, "시작", startTime, themeColor, () async {
-                              final time = await showTimePicker(context: context, initialTime: startTime);
-                              if (time != null) setSheetState(() => startTime = time);
-                            })),
-                            const SizedBox(width: 12),
-                            Icon(Icons.arrow_forward_rounded, color: Colors.white.withOpacity(0.2)),
-                            const SizedBox(width: 12),
-                            Expanded(child: _buildTimePickerButton(context, "종료", endTime, themeColor, () async {
-                              final time = await showTimePicker(context: context, initialTime: endTime);
-                              if (time != null) setSheetState(() => endTime = time);
-                            })),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        if (isManager)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
-                            child: Row(
-                              children: [
-                                const Text("공식 일정", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                                const Spacer(),
-                                Switch(
-                                  value: isOfficial,
-                                  activeColor: const Color(0xFF1E1E1E),
-                                  activeTrackColor: themeColor,
-                                  onChanged: (val) => setSheetState(() => isOfficial = val),
-                                ),
-                              ],
-                            ),
-                          ),
-                        const SizedBox(height: 30),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 56,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              if (titleController.text.isNotEmpty) {
-                                final startDateTime = DateTime(inputDate.year, inputDate.month, inputDate.day, startTime.hour, startTime.minute);
-                                final endDateTime = DateTime(inputDate.year, inputDate.month, inputDate.day, endTime.hour, endTime.minute);
-                                _addSchedule(title: titleController.text, description: descController.text, startTime: startDateTime, endTime: endDateTime, isOfficial: isOfficial);
-                                Navigator.pop(context);
-                              }
-                            },
-                            style: ElevatedButton.styleFrom(backgroundColor: themeColor, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 0),
-                            child: const Text("일정 생성", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  // [수정] 삭제 확인 팝업 (한국어)
-  void _showDeleteConfirmDialog(BuildContext context, int id, bool isOfficial, bool isManager) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.delete_forever_rounded, color: Colors.redAccent, size: 48),
-              const SizedBox(height: 16),
-              const Text("일정 삭제", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Text(
-                "정말 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.",
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 14),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: Text("취소", style: TextStyle(color: Colors.white.withOpacity(0.5))),
-                    ),
-                  ),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _deleteSchedule(id, isOfficial, isManager);
-                      },
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                      child: const Text("삭제"),
-                    ),
-                  ),
-                ],
-              )
-            ],
-          ),
-        ),
-      ),
     );
   }
 
