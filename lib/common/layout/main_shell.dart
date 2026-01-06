@@ -3,12 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:just_audio_background/just_audio_background.dart';
+import 'package:just_audio/just_audio.dart'; // PlayerState 사용을 위해 추가
 
 import '../../core/constants/department_enum.dart';
 import '../../core/data/supabase_repository.dart';
 import '../../core/state/global_providers.dart';
 import '../../features/auth/auth_provider.dart';
-import '../../features/streaming/mini_player.dart';
+import '../../features/streaming/audio_service.dart'; // 오디오 서비스 추가
 import '../../features/streaming/player_provider.dart';
 import '../../features/streaming/stream_screen.dart';
 
@@ -30,7 +31,6 @@ class _MainShellState extends ConsumerState<MainShell> {
   Future<void> _checkAndRedirectIfNeeded() async {
     final authStatus = ref.read(authProvider);
     if (authStatus != AuthStatus.authenticated) return;
-    // (프로필 체크 로직 유지)
   }
 
   @override
@@ -54,20 +54,23 @@ class _MainShellState extends ConsumerState<MainShell> {
               left: 0, right: 0, bottom: 0, height: 80,
               child: _buildNavBar(currentIndex),
             ),
-            // [수정] 매개변수 없이 깔끔하게 호출
+
+            // [수정] currentSong이 있을 때만 플레이어 표시 & song 데이터 전달
             if (currentSong != null)
               AnimatedPositioned(
                 duration: const Duration(milliseconds: 300),
                 top: isExpanded ? 0 : null,
-                bottom: isExpanded ? 0 : 92,
-                left: isExpanded ? 0 : 0,
-                right: isExpanded ? 0 : 0,
-                height: isExpanded ? null : 80,
+                bottom: isExpanded ? 0 : 80, // 탭바 높이만큼 띄움
+                left: 0, right: 0,
+                height: isExpanded ? null : 64, // 미니 플레이어 높이
                 child: GestureDetector(
                   onTap: () { if (!isExpanded) ref.read(isPlayerExpandedProvider.notifier).state = true; },
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 200),
-                    child: isExpanded ? const StreamScreen() : const MiniPlayer(),
+                    // [수정] StreamScreen과 _MiniPlayer에 song 전달
+                    child: isExpanded
+                        ? StreamScreen(song: currentSong)
+                        : _MiniPlayer(song: currentSong),
                   ),
                 ),
               ),
@@ -127,6 +130,61 @@ class _NavBarIcon extends ConsumerWidget {
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Icon(icon, color: isSelected ? Colors.white : Colors.grey, size: 28),
+      ),
+    );
+  }
+}
+
+// [추가] 미니 플레이어 위젯을 파일 내부에 정의 (파일 삭제 대응)
+class _MiniPlayer extends StatelessWidget {
+  final MediaItem song;
+  const _MiniPlayer({required this.song});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.grey[900],
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          // 앨범 커버
+          Container(
+            width: 40, height: 40,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(4),
+              color: Colors.grey[800],
+              image: song.artUri != null
+                  ? DecorationImage(image: NetworkImage(song.artUri.toString()), fit: BoxFit.cover)
+                  : null,
+            ),
+            child: song.artUri == null ? const Icon(Icons.music_note, size: 20, color: Colors.white54) : null,
+          ),
+          const SizedBox(width: 12),
+          // 제목 & 가수
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                Text(song.artist ?? 'Unknown', maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              ],
+            ),
+          ),
+          // 재생/일시정지 버튼
+          StreamBuilder<PlayerState>(
+            stream: KraftAudioService.playerStateStream,
+            builder: (context, snapshot) {
+              final playing = snapshot.data?.playing ?? false;
+              return IconButton(
+                icon: Icon(playing ? Icons.pause : Icons.play_arrow, color: Colors.white),
+                onPressed: playing ? KraftAudioService.pause : KraftAudioService.resume,
+              );
+            },
+          ),
+        ],
       ),
     );
   }

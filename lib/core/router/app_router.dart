@@ -9,6 +9,7 @@ import '../../features/auth/onboarding_screen.dart';
 import '../../features/home/home_screen.dart';
 import '../../features/curriculum/curriculum_list_screen.dart';
 import '../../features/curriculum/assignment_upload_screen.dart';
+import '../../features/streaming/stream_list_screen.dart'; // [수정] 목록 화면 import
 import '../../features/streaming/stream_screen.dart';
 import '../../features/splash/splash_screen.dart';
 import '../../features/admin/qr_create_screen.dart';
@@ -39,7 +40,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
       GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingScreen()),
 
-      // [임원진 기능] QR 생성 및 출석 명단
+      // [임원진 기능]
       GoRoute(path: '/qr_create', builder: (_, __) => const QrCreateScreen()),
       GoRoute(path: '/attendance_list', builder: (_, __) => const AttendanceListScreen()),
 
@@ -54,8 +55,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/upcoming', pageBuilder: (_, __) => const NoTransitionPage(child: CurriculumListScreen())),
           GoRoute(path: '/team_members', pageBuilder: (_, __) => const NoTransitionPage(child: TeamMemberScreen())),
 
-          // StreamScreen 호출 유지
-          GoRoute(path: '/stream', pageBuilder: (_, __) => const NoTransitionPage(child: StreamScreen())),
+          // [수정] '/stream' 경로는 목록 화면(StreamListScreen)으로 연결
+          GoRoute(path: '/stream', pageBuilder: (_, __) => const NoTransitionPage(child: StreamListScreen())),
 
           GoRoute(path: '/profile', pageBuilder: (_, __) => const NoTransitionPage(child: ProfileScreen())),
         ],

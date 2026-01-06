@@ -10,7 +10,10 @@ class SupabaseRepository {
   User? get currentUser => _client.auth.currentUser;
   String? get currentUserId => _client.auth.currentUser?.id;
 
-  // --- Auth & Profile ---
+  // ==========================================================
+  // [Auth & Profile]
+  // ==========================================================
+
   Future<String?> signIn({required String email, required String password}) async {
     try {
       await _client.auth.signInWithPassword(email: email, password: password);
@@ -144,7 +147,10 @@ class SupabaseRepository {
     }
   }
 
-  // --- [공식 일정] Curriculums ---
+  // ==========================================================
+  // [공식 일정] Curriculums
+  // ==========================================================
+
   Stream<List<Map<String, dynamic>>> getCurriculumsStream(int teamId) {
     return _client
         .from('curriculums')
@@ -201,7 +207,10 @@ class SupabaseRepository {
     }
   }
 
-  // --- [개인 일정] Personal Schedules ---
+  // ==========================================================
+  // [개인 일정] Personal Schedules
+  // ==========================================================
+
   Stream<List<Map<String, dynamic>>> getPersonalSchedulesStream() {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return const Stream.empty();
@@ -239,7 +248,10 @@ class SupabaseRepository {
     }
   }
 
-  // --- Notices ---
+  // ==========================================================
+  // [Notices]
+  // ==========================================================
+
   Stream<List<Map<String, dynamic>>> getNoticesStream(int teamId) {
     return _client.from('notices').stream(primaryKey: ['id']).eq('team_id', teamId).order('created_at', ascending: false);
   }
@@ -263,10 +275,9 @@ class SupabaseRepository {
   }
 
   // ==========================================================
-  // [Archives] 로컬 저장 + 삭제 기능 추가됨
+  // [Archives] 로컬 저장 + 삭제 기능
   // ==========================================================
 
-  // 1. 내 아카이브 목록 조회
   Future<List<Map<String, dynamic>>> fetchMyArchives() async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return [];
@@ -284,7 +295,6 @@ class SupabaseRepository {
     }
   }
 
-  // 2. 아카이브 저장 (로컬 + DB)
   Future<void> saveArchiveLocally({
     required String title,
     required String description,
@@ -315,13 +325,10 @@ class SupabaseRepository {
     }
   }
 
-  // 3. [추가됨] 아카이브 삭제 (DB + 로컬 파일)
   Future<void> deleteArchive(int id, String fileName) async {
     try {
-      // 1. DB에서 삭제
       await _client.from('archives').delete().eq('id', id);
 
-      // 2. 로컬 파일 삭제
       final directory = await getApplicationDocumentsDirectory();
       final file = File('${directory.path}/$fileName');
 
@@ -334,7 +341,9 @@ class SupabaseRepository {
     }
   }
 
-  // --- [Music Social Features] ---
+  // ==========================================================
+  // [Music Social Features] 핵심 수정 부분
+  // ==========================================================
 
   Future<void> addComment(int songId, String content) async {
     final user = _client.auth.currentUser;
@@ -364,21 +373,34 @@ class SupabaseRepository {
     await _client.from('comments').delete().eq('id', commentId);
   }
 
+  // [중요 수정] 디버깅 로그 강화 및 URL 생성 로직 안정화
   Future<List<MediaItem>> fetchSongs() async {
     try {
+      print('🎵 [Supabase] 노래 목록 Fetch 시작...');
+
+      // 1. Supabase 'songs' 테이블 쿼리
+      // (테이블 이름이 정확한지, RLS 정책이 열려있는지 확인하세요)
       final List<dynamic> response = await _client
           .from('songs')
           .select('*')
           .order('created_at', ascending: false);
 
-      if (response.isEmpty) return [];
+      print('🎵 [Supabase] 서버에서 응답 받음: ${response.length}개의 데이터');
 
-      return response.map((song) {
+      if (response.isEmpty) {
+        print('⚠️ [Supabase] 데이터가 0개입니다. (테이블이 비어있거나, Row Level Security 정책 문제일 수 있음)');
+        return [];
+      }
+
+      final songs = response.map((song) {
         final String rawPath = song['file_path'] ?? '';
         final String rawCover = song['cover_url'] ?? '';
 
+        // https://medium.com/@kskyung0624/%EC%83%9D%EC%84%B1%EC%9E%90%EC%97%90-%EC%9E%88%EB%8A%94-%EB%A1%9C%EC%A7%81-%EC%A3%BC%EB%AC%B4%EB%A5%B4%EA%B8%B0-9e7685a6ab91
         String audioUrl = rawPath;
         if (rawPath.isNotEmpty && !rawPath.startsWith('http')) {
+          // Storage 버킷 이름이 'songs'가 맞는지 확인하세요.
+          // public 버킷이어야 getPublicUrl이 정상 동작합니다.
           audioUrl = _client.storage.from('songs').getPublicUrl(rawPath);
         }
 
@@ -387,7 +409,7 @@ class SupabaseRepository {
           coverUrl = _client.storage.from('songs').getPublicUrl(rawCover);
         }
 
-        final encodedUrl = Uri.encodeFull(audioUrl);
+        print('▶️ [Song] 제목: ${song['title']} | URL: $audioUrl');
 
         return MediaItem(
           id: song['id'].toString(),
@@ -395,10 +417,15 @@ class SupabaseRepository {
           title: song['title'] ?? '제목 없음',
           artist: song['artist'] ?? '아티스트 미상',
           artUri: coverUrl.isNotEmpty ? Uri.tryParse(coverUrl) : null,
-          extras: {'url': encodedUrl},
+          extras: {'url': audioUrl}, // 여기서 변환된 전체 URL을 넘깁니다.
         );
       }).toList();
+
+      return songs;
+
     } catch (e) {
+      print("❌ [Supabase Error] 노래 목록 가져오기 대실패: $e");
+      // 에러가 나면 빈 리스트를 반환하여 앱이 죽지 않게 함
       return [];
     }
   }
@@ -452,7 +479,10 @@ class SupabaseRepository {
     }
   }
 
-  // --- Team Members ---
+  // ==========================================================
+  // [Team Members & Attendance]
+  // ==========================================================
+
   Future<List<Map<String, dynamic>>> getTeamMembers(int teamId) async {
     try {
       final response = await _client
