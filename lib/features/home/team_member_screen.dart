@@ -275,7 +275,7 @@ class TeamMemberScreen extends ConsumerWidget {
 }
 
 // -----------------------------------------------------------------------------
-// 상세 프로필 팝업 카드 (기존 코드 유지)
+// 상세 프로필 팝업 카드 (기존 코드 유지 및 성별 추가)
 // -----------------------------------------------------------------------------
 class MemberProfileCard extends StatelessWidget {
   final Map<String, dynamic> user;
@@ -298,6 +298,9 @@ class MemberProfileCard extends StatelessWidget {
     final initial = name.isNotEmpty ? name.substring(0, 1) : '?';
     final cohort = user['cohort'];
     final generationString = cohort != null ? "${cohort}기" : "기수 미정";
+
+    // [수정] 성별 데이터 가져오기 (DB 컬럼이 'gender'라고 가정)
+    final gender = user['gender'] ?? '비공개';
 
     final isManager = role == 'manager';
     final themeColor = isManager ? dept.color : Colors.white;
@@ -408,10 +411,14 @@ class MemberProfileCard extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Column(
                       children: [
+                        // [수정] 학번, 성별, 기수를 한 줄에 배치
                         Row(
                           children: [
                             Expanded(child: _buildInfoBox("학번", studentId, Icons.badge_outlined)),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: 8),
+                            // 성별 박스 추가
+                            Expanded(child: _buildInfoBox("성별", gender, Icons.wc)),
+                            const SizedBox(width: 8),
                             Expanded(child: _buildInfoBox("기수", generationString, Icons.school_outlined)),
                           ],
                         ),
