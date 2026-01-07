@@ -17,138 +17,229 @@ class StreamScreen extends ConsumerWidget {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // 배경 이미지 (블러 처리)
+          // 1. 배경 (앨범 아트 블러)
           Positioned.fill(
             child: song.artUri != null
                 ? Image.network(song.artUri.toString(), fit: BoxFit.cover)
-                : Container(color: const Color(0xFF111111)),
+                : Container(color: const Color(0xFF1a1a1a)),
           ),
           Positioned.fill(
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-              child: Container(color: Colors.black.withOpacity(0.7)),
+              filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
+              child: Container(color: Colors.black.withOpacity(0.6)),
             ),
           ),
 
-          // 플레이어 UI
+          // 2. 메인 컨텐츠 (Overflow 방지)
           SafeArea(
-            child: Column(
-              children: [
-                // 상단 닫기 버튼
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: IconButton(
-                    icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white, size: 40),
-                    onPressed: () {
-                      ref.read(isPlayerExpandedProvider.notifier).state = false;
-                    },
-                  ),
-                ),
+            child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // 화면이 너무 작을 경우를 대비한 스크롤 뷰
+                  return SingleChildScrollView(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly, // 간격을 균등하게 배분
+                          children: [
+                            // [상단바] 닫기 버튼
+                            Row(
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white, size: 36),
+                                  onPressed: () {
+                                    ref.read(isPlayerExpandedProvider.notifier).state = false;
+                                  },
+                                ),
+                                const Spacer(),
+                                const Text(
+                                    "Now Playing",
+                                    style: TextStyle(color: Colors.white60, fontSize: 14, fontWeight: FontWeight.w600)
+                                ),
+                                const Spacer(),
+                                // 균형을 위한 투명 아이콘 (더보기 버튼 위치)
+                                IconButton(
+                                  icon: const Icon(Icons.more_horiz, color: Colors.transparent),
+                                  onPressed: null,
+                                ),
+                              ],
+                            ),
 
-                const Spacer(),
+                            const SizedBox(height: 10),
 
-                // 앨범 커버
-                Container(
-                  width: 300, height: 300,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [const BoxShadow(color: Colors.black54, blurRadius: 30, offset: Offset(0, 10))],
-                    image: song.artUri != null
-                        ? DecorationImage(image: NetworkImage(song.artUri.toString()), fit: BoxFit.cover)
-                        : null,
-                    color: Colors.grey[900],
-                  ),
-                  child: song.artUri == null
-                      ? const Icon(Icons.music_note, size: 100, color: Colors.white24)
-                      : null,
-                ),
-
-                const SizedBox(height: 40),
-
-                // 곡 정보
-                Text(song.title,
-                    style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center
-                ),
-                const SizedBox(height: 8),
-                Text(song.artist ?? "Unknown Artist",
-                    style: const TextStyle(color: Colors.white60, fontSize: 18)
-                ),
-
-                const SizedBox(height: 40),
-
-                // 재생 컨트롤
-                StreamBuilder<PlayerState>(
-                  stream: KraftAudioService.playerStateStream,
-                  builder: (context, snapshot) {
-                    final playerState = snapshot.data;
-                    final processingState = playerState?.processingState;
-                    final playing = playerState?.playing ?? false;
-
-                    if (processingState == ProcessingState.loading || processingState == ProcessingState.buffering) {
-                      return const SizedBox(
-                        width: 80, height: 80,
-                        child: CircularProgressIndicator(color: Colors.white),
-                      );
-                    }
-
-                    return IconButton(
-                      iconSize: 80,
-                      icon: Icon(
-                        playing ? Icons.pause_circle_filled : Icons.play_circle_filled,
-                        color: Colors.white,
-                      ),
-                      onPressed: playing ? KraftAudioService.pause : KraftAudioService.resume,
-                    );
-                  },
-                ),
-
-                const SizedBox(height: 20),
-
-                // 진행 바 (Slider)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: StreamBuilder<Duration?>(
-                    stream: KraftAudioService.durationStream,
-                    builder: (context, snapshot) {
-                      final duration = snapshot.data ?? Duration.zero;
-                      return StreamBuilder<Duration>(
-                        stream: KraftAudioService.positionStream,
-                        builder: (context, snapshot) {
-                          var position = snapshot.data ?? Duration.zero;
-                          if (position > duration) position = duration;
-
-                          return Column(
-                            children: [
-                              Slider(
-                                activeColor: Colors.white,
-                                inactiveColor: Colors.white24,
-                                min: 0.0,
-                                max: duration.inMilliseconds.toDouble() > 0 ? duration.inMilliseconds.toDouble() : 1.0,
-                                value: position.inMilliseconds.toDouble(),
-                                onChanged: (value) {
-                                  KraftAudioService.seek(Duration(milliseconds: value.toInt()));
-                                },
+                            // [앨범 아트] 화면 크기에 따라 유연하게 조절 (핵심 수정)
+                            ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxHeight: constraints.maxHeight * 0.45, // 전체 높이의 45%를 넘지 않음
+                                maxWidth: constraints.maxWidth * 0.9,   // 전체 너비의 90%
                               ),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 20),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(_formatDuration(position), style: const TextStyle(color: Colors.white54)),
-                                    Text(_formatDuration(duration), style: const TextStyle(color: Colors.white54)),
-                                  ],
+                              child: AspectRatio(
+                                aspectRatio: 1, // 정사각형 비율 유지
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(20),
+                                    boxShadow: [
+                                      BoxShadow(
+                                          color: Colors.black.withOpacity(0.5),
+                                          blurRadius: 30,
+                                          offset: const Offset(0, 15)
+                                      )
+                                    ],
+                                    image: song.artUri != null
+                                        ? DecorationImage(image: NetworkImage(song.artUri.toString()), fit: BoxFit.cover)
+                                        : null,
+                                    color: Colors.grey[900],
+                                  ),
+                                  child: song.artUri == null
+                                      ? const Icon(Icons.music_note_rounded, size: 80, color: Colors.white24)
+                                      : null,
                                 ),
                               ),
-                            ],
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 40),
-              ],
+                            ),
+
+                            const SizedBox(height: 20),
+
+                            // [곡 제목 및 아티스트]
+                            Column(
+                              children: [
+                                Text(
+                                  song.title,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  song.artist ?? "Unknown Artist",
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                      color: Colors.white60,
+                                      fontSize: 16
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(height: 20),
+
+                            // [진행 바 Slider]
+                            StreamBuilder<Duration?>(
+                              stream: KraftAudioService.durationStream,
+                              builder: (context, snapshot) {
+                                final duration = snapshot.data ?? Duration.zero;
+                                return StreamBuilder<Duration>(
+                                  stream: KraftAudioService.positionStream,
+                                  builder: (context, snapshot) {
+                                    var position = snapshot.data ?? Duration.zero;
+                                    if (position > duration) position = duration;
+
+                                    return Column(
+                                      children: [
+                                        SliderTheme(
+                                          data: SliderTheme.of(context).copyWith(
+                                            trackHeight: 4,
+                                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                                            overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                                            activeTrackColor: Colors.white,
+                                            inactiveTrackColor: Colors.white24,
+                                            thumbColor: Colors.white,
+                                          ),
+                                          child: Slider(
+                                            min: 0.0,
+                                            max: duration.inMilliseconds.toDouble() > 0 ? duration.inMilliseconds.toDouble() : 1.0,
+                                            value: position.inMilliseconds.toDouble(),
+                                            onChanged: (value) {
+                                              KraftAudioService.seek(Duration(milliseconds: value.toInt()));
+                                            },
+                                          ),
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text(_formatDuration(position), style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                                              Text(_formatDuration(duration), style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                );
+                              },
+                            ),
+
+                            const SizedBox(height: 10),
+
+                            // [재생 컨트롤]
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.skip_previous_rounded, color: Colors.white, size: 40),
+                                  onPressed: () {},
+                                ),
+                                const SizedBox(width: 24),
+                                StreamBuilder<PlayerState>(
+                                  stream: KraftAudioService.playerStateStream,
+                                  builder: (context, snapshot) {
+                                    final playerState = snapshot.data;
+                                    final processingState = playerState?.processingState;
+                                    final playing = playerState?.playing ?? false;
+
+                                    if (processingState == ProcessingState.loading || processingState == ProcessingState.buffering) {
+                                      return const SizedBox(
+                                        width: 70, height: 70,
+                                        child: Padding(
+                                          padding: EdgeInsets.all(20.0),
+                                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
+                                        ),
+                                      );
+                                    }
+
+                                    return GestureDetector(
+                                      onTap: playing ? KraftAudioService.pause : KraftAudioService.resume,
+                                      child: Container(
+                                        width: 70, height: 70,
+                                        decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            shape: BoxShape.circle,
+                                            boxShadow: [BoxShadow(color: Colors.white.withOpacity(0.2), blurRadius: 20)]
+                                        ),
+                                        child: Icon(
+                                          playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                          color: Colors.black,
+                                          size: 38,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                                const SizedBox(width: 24),
+                                IconButton(
+                                  icon: const Icon(Icons.skip_next_rounded, color: Colors.white, size: 40),
+                                  onPressed: () {},
+                                ),
+                              ],
+                            ),
+
+                            // 하단 여백 확보
+                            const SizedBox(height: 30),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }
             ),
           ),
         ],
@@ -157,7 +248,7 @@ class StreamScreen extends ConsumerWidget {
   }
 
   String _formatDuration(Duration d) {
-    final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final minutes = d.inMinutes.remainder(60).toString().padLeft(1, '0');
     final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
     return "$minutes:$seconds";
   }
