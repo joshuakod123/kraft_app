@@ -15,36 +15,246 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
-  // [New] 화면 진입 시 임시 비밀번호 여부 체크
+  // 프로필 데이터 새로고침을 위한 Future 변수
+  late Future<Map<String, dynamic>?> _profileFuture;
+
   @override
   void initState() {
     super.initState();
+    _refreshProfile();
     _checkTempPasswordStatus();
   }
 
+  void _refreshProfile() {
+    setState(() {
+      _profileFuture = SupabaseRepository().getUserProfile();
+    });
+  }
+
   Future<void> _checkTempPasswordStatus() async {
-    // 화면 빌드가 끝난 후 실행
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       final profile = await SupabaseRepository().getUserProfile();
-
-      // 임시 비밀번호 사용자라면 강제 변경 팝업 띄우기
       if (profile != null && profile['is_temp_password'] == true) {
         if (!mounted) return;
-
-        // 사용자의 팀 색상 가져오기 (없으면 기본값)
         final teamId = profile['team_id'] ?? 1;
         final dept = Department.values.firstWhere((d) => d.id == teamId, orElse: () => Department.business);
 
         showDialog(
           context: context,
-          barrierDismissible: false, // 배경 클릭해서 닫기 방지 (강제 변경)
+          barrierDismissible: false,
           builder: (context) => _ChangePasswordDialog(
             isForced: true,
-            pointColor: dept.color, // 팀 색상 전달
+            pointColor: dept.color,
           ),
         );
       }
     });
+  }
+
+  // [기능 1] 설정 메뉴 열기 (Bottom Sheet)
+  void _showSettingsModal(BuildContext context, Map<String, dynamic> user, Department dept) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E1E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(2)),
+                ),
+                const SizedBox(height: 20),
+                _buildSettingsItem(
+                  icon: Icons.edit_note_rounded,
+                  text: "프로필 정보 수정",
+                  color: Colors.white,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showEditProfileDialog(user, dept.color);
+                  },
+                ),
+                _buildSettingsItem(
+                  icon: Icons.lock_reset_rounded,
+                  text: "비밀번호 변경",
+                  color: Colors.white,
+                  onTap: () {
+                    Navigator.pop(context);
+                    showDialog(
+                      context: context,
+                      builder: (context) => _ChangePasswordDialog(pointColor: dept.color),
+                    );
+                  },
+                ),
+                const Divider(color: Colors.white10, height: 30),
+                _buildSettingsItem(
+                  icon: Icons.logout_rounded,
+                  text: "로그아웃",
+                  color: Colors.white70,
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await ref.read(authProvider.notifier).logout();
+                  },
+                ),
+                _buildSettingsItem(
+                  icon: Icons.person_remove_rounded,
+                  text: "회원 탈퇴",
+                  color: Colors.redAccent,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showDeleteConfirmDialog(context, ref);
+                  },
+                ),
+                const SizedBox(height: 10),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSettingsItem({required IconData icon, required String text, required Color color, required VoidCallback onTap}) {
+    return ListTile(
+      leading: Icon(icon, color: color),
+      title: Text(text, style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w500)),
+      onTap: onTap,
+    );
+  }
+
+  // [기능 2] 프로필 수정 다이얼로그
+  void _showEditProfileDialog(Map<String, dynamic> user, Color pointColor) {
+    final nameController = TextEditingController(text: user['name']);
+    final majorController = TextEditingController(text: user['major']);
+    final phoneController = TextEditingController(text: user['phone']);
+    final schoolController = TextEditingController(text: user['school']);
+    final studentIdController = TextEditingController(text: user['student_id']);
+
+    // 수정 불가능한 값들 (기존 값 유지)
+    final int teamId = user['team_id'];
+    final String gender = user['gender'] ?? 'M';
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2C2C2C),
+        title: Text("프로필 수정", style: TextStyle(color: pointColor, fontWeight: FontWeight.bold)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildEditTextField("이름", nameController),
+              _buildEditTextField("학교", schoolController),
+              _buildEditTextField("학번", studentIdController),
+              _buildEditTextField("전공", majorController),
+              _buildEditTextField("전화번호", phoneController),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("취소", style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () async {
+              try {
+                // 업데이트 요청
+                await SupabaseRepository().updateUserProfile(
+                  name: nameController.text,
+                  major: majorController.text,
+                  phone: phoneController.text,
+                  teamId: teamId,
+                  school: schoolController.text,
+                  studentId: studentIdController.text,
+                  gender: gender,
+                );
+
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  _refreshProfile(); // 화면 새로고침
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("프로필이 수정되었습니다.")),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("수정 실패: $e")),
+                  );
+                }
+              }
+            },
+            child: Text("저장", style: TextStyle(color: pointColor, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEditTextField(String label, TextEditingController controller) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: TextField(
+        controller: controller,
+        style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: Colors.grey),
+          enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+          focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white)),
+        ),
+      ),
+    );
+  }
+
+  // [기능 3] 회원 탈퇴 확인
+  void _showDeleteConfirmDialog(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2C2C2C),
+        title: const Text('회원 탈퇴', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+        content: const Text(
+          '정말로 탈퇴하시겠습니까?\n계정 정보와 모든 활동 내역이 영구적으로 삭제됩니다.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('취소', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                await ref.read(authProvider.notifier).deleteAccount();
+                if (context.mounted) {
+                  context.go('/login');
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('회원 탈퇴가 완료되었습니다.')),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('오류 발생: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('탈퇴하기', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -52,14 +262,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       body: FutureBuilder<Map<String, dynamic>?>(
-        future: SupabaseRepository().getUserProfile(),
+        future: _profileFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
           final user = snapshot.data;
-
           final name = user?['name'] ?? 'Member';
           final major = user?['major'] ?? '미입력';
           final school = user?['school'] ?? '미입력';
@@ -70,143 +279,116 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           final role = user?['role'] ?? 'member';
           final teamId = user?['team_id'] ?? 1;
 
-          // [중요] 여기서 결정된 dept.color를 버튼 등에 사용
           final dept = Department.values.firstWhere((d) => d.id == teamId, orElse: () => Department.business);
 
           return SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                return SingleChildScrollView(
-                  physics: const ClampingScrollPhysics(),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: IntrinsicHeight(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 20),
-                            // [1] 상단 프로필 헤더
-                            Row(
+                return Stack(
+                  children: [
+                    SingleChildScrollView(
+                      physics: const ClampingScrollPhysics(),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                        child: Padding(
+                          padding: const EdgeInsets.all(24.0),
+                          child: IntrinsicHeight(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                CircleAvatar(
-                                  radius: 40,
-                                  backgroundColor: dept.color.withOpacity(0.2),
-                                  child: Icon(dept.icon, size: 40, color: dept.color),
-                                ),
-                                const SizedBox(width: 20),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                const SizedBox(height: 20),
+                                // [1] 상단 프로필 헤더
+                                Row(
                                   children: [
-                                    Text(name, style: GoogleFonts.chakraPetch(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                      decoration: BoxDecoration(
-                                          color: role == 'manager' ? Colors.yellowAccent : dept.color,
-                                          borderRadius: BorderRadius.circular(4)
-                                      ),
-                                      child: Text(
-                                        role == 'manager' ? '임원진' : '멤버',
-                                        style: const TextStyle(color: Colors.black, fontSize: 12, fontWeight: FontWeight.bold),
-                                      ),
+                                    CircleAvatar(
+                                      radius: 40,
+                                      backgroundColor: dept.color.withOpacity(0.2),
+                                      child: Icon(dept.icon, size: 40, color: dept.color),
                                     ),
+                                    const SizedBox(width: 20),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(name, style: GoogleFonts.chakraPetch(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                          decoration: BoxDecoration(
+                                              color: role == 'manager' ? Colors.yellowAccent : dept.color,
+                                              borderRadius: BorderRadius.circular(4)
+                                          ),
+                                          child: Text(
+                                            role == 'manager' ? '임원진' : '멤버',
+                                            style: const TextStyle(color: Colors.black, fontSize: 12, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                      ],
+                                    )
                                   ],
-                                )
-                              ],
-                            ),
-                            const SizedBox(height: 40),
-
-                            // [2] 정보 타일들
-                            Row(
-                              children: [
-                                Expanded(child: _buildInfoTile("대학", school)),
-                                const SizedBox(width: 16),
-                                Expanded(child: _buildInfoTile("학번", studentId)),
-                              ],
-                            ),
-                            Row(
-                              children: [
-                                Expanded(child: _buildInfoTile("전공", major)),
-                                const SizedBox(width: 16),
-                                Expanded(child: _buildInfoTile("기수", cohortString, color: AppTheme.primaryColor)),
-                              ],
-                            ),
-                            Row(
-                              children: [
-                                Expanded(child: _buildInfoTile("성별", gender)),
-                                const SizedBox(width: 16),
-                                Expanded(child: _buildInfoTile("부서", dept.name, color: dept.color)),
-                              ],
-                            ),
-
-                            _buildInfoTile("이메일", SupabaseRepository().currentUser?.email ?? ''),
-
-                            const Spacer(),
-                            const SizedBox(height: 24),
-
-                            // [3] MY ARCHIVE 버튼
-                            SizedBox(
-                              width: double.infinity,
-                              height: 56,
-                              child: OutlinedButton.icon(
-                                onPressed: () => context.push('/archive'),
-                                icon: const Icon(Icons.folder_open_rounded),
-                                label: const Text("내 아카이브", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: dept.color,
-                                  side: BorderSide(color: dept.color, width: 2),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                                 ),
-                              ),
-                            ),
+                                const SizedBox(height: 40),
 
-                            const SizedBox(height: 16),
-
-                            // [4] 비밀번호 변경 버튼 (팀 컬러 적용)
-                            SizedBox(
-                              width: double.infinity,
-                              height: 56,
-                              child: OutlinedButton.icon(
-                                onPressed: () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (context) => _ChangePasswordDialog(pointColor: dept.color),
-                                  );
-                                },
-                                icon: const Icon(Icons.lock_reset_rounded),
-                                label: const Text("비밀번호 변경", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.white,
-                                  side: const BorderSide(color: Colors.white24, width: 2),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                // [2] 정보 타일들
+                                Row(
+                                  children: [
+                                    Expanded(child: _buildInfoTile("대학", school)),
+                                    const SizedBox(width: 16),
+                                    Expanded(child: _buildInfoTile("학번", studentId)),
+                                  ],
                                 ),
-                              ),
-                            ),
-
-                            const SizedBox(height: 16),
-
-                            // [5] 로그아웃 버튼
-                            SizedBox(
-                              width: double.infinity,
-                              height: 50,
-                              child: ElevatedButton(
-                                onPressed: () => ref.read(authProvider.notifier).logout(),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.redAccent.withOpacity(0.1),
-                                  foregroundColor: Colors.redAccent,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  side: BorderSide(color: Colors.redAccent.withOpacity(0.5)),
+                                Row(
+                                  children: [
+                                    Expanded(child: _buildInfoTile("전공", major)),
+                                    const SizedBox(width: 16),
+                                    Expanded(child: _buildInfoTile("기수", cohortString, color: AppTheme.primaryColor)),
+                                  ],
                                 ),
-                                child: const Text("로그아웃", style: TextStyle(fontWeight: FontWeight.bold)),
-                              ),
+                                Row(
+                                  children: [
+                                    Expanded(child: _buildInfoTile("성별", gender)),
+                                    const SizedBox(width: 16),
+                                    Expanded(child: _buildInfoTile("부서", dept.name, color: dept.color)),
+                                  ],
+                                ),
+
+                                _buildInfoTile("이메일", SupabaseRepository().currentUser?.email ?? ''),
+
+                                const Spacer(),
+                                const SizedBox(height: 24),
+
+                                // [3] MY ARCHIVE 버튼 (메인 기능으로 유지)
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 56,
+                                  child: OutlinedButton.icon(
+                                    onPressed: () => context.push('/archive'),
+                                    icon: const Icon(Icons.folder_open_rounded),
+                                    label: const Text("내 아카이브", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: dept.color,
+                                      side: BorderSide(color: dept.color, width: 2),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                              ],
                             ),
-                            const SizedBox(height: 20),
-                          ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
+
+                    // [4] 우측 상단 설정 아이콘 (톱니바퀴)
+                    if (user != null)
+                      Positioned(
+                        top: 16,
+                        right: 16,
+                        child: IconButton(
+                          icon: const Icon(Icons.settings, color: Colors.white70, size: 28),
+                          onPressed: () => _showSettingsModal(context, user, dept),
+                        ),
+                      ),
+                  ],
                 );
               },
             ),
@@ -232,14 +414,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 }
 
-// [수정됨] 비밀번호 변경 팝업 위젯 (팀 컬러 지원)
+// 비밀번호 변경 다이얼로그
 class _ChangePasswordDialog extends StatefulWidget {
   final bool isForced;
-  final Color pointColor; // 팀 색상
+  final Color pointColor;
 
   const _ChangePasswordDialog({
     this.isForced = false,
-    this.pointColor = AppTheme.primaryColor, // 기본값
+    this.pointColor = AppTheme.primaryColor,
   });
 
   @override
@@ -258,7 +440,6 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
     super.dispose();
   }
 
-  // 내부 팝업 (성공/실패 메시지)
   void _showPopupDialog(String title, String message, {bool isError = false}) {
     showDialog(
       context: context,
@@ -272,20 +453,13 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
             children: [
               Icon(
                 isError ? Icons.error_outline_rounded : Icons.check_circle_outline_rounded,
-                color: isError ? Colors.redAccent : widget.pointColor, // 아이콘도 팀 컬러로
+                color: isError ? Colors.redAccent : widget.pointColor,
                 size: 48,
               ),
               const SizedBox(height: 20),
-              Text(
-                title,
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-              ),
+              Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.4),
-              ),
+              Text(message, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.4)),
               const SizedBox(height: 28),
               SizedBox(
                 width: double.infinity,
@@ -316,25 +490,18 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
       _showPopupDialog("입력 오류", "모든 필드를 입력해주세요.", isError: true);
       return;
     }
-
     if (newPass.length < 6) {
       _showPopupDialog("비밀번호 오류", "새 비밀번호는 6자 이상이어야 합니다.", isError: true);
       return;
     }
 
     setState(() => _isLoading = true);
-
-    final error = await SupabaseRepository().changePassword(
-      currentPassword: current,
-      newPassword: newPass,
-    );
-
+    final error = await SupabaseRepository().changePassword(currentPassword: current, newPassword: newPass);
     if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (error == null) {
       Navigator.of(context).pop();
-      // 성공 팝업
       Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted) {
           showDialog(
@@ -347,7 +514,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.check_circle_outline_rounded, color: widget.pointColor, size: 48), // 팀 컬러 적용
+                    Icon(Icons.check_circle_outline_rounded, color: widget.pointColor, size: 48),
                     const SizedBox(height: 20),
                     const Text("변경 완료", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 12),
@@ -379,7 +546,6 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
       backgroundColor: const Color(0xFF1E1E1E),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        // [강제 변경 시] 팀 컬러로 테두리 강조
         side: widget.isForced ? BorderSide(color: widget.pointColor, width: 2) : BorderSide.none,
       ),
       child: Padding(
@@ -391,22 +557,14 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  "비밀번호 변경",
-                  style: TextStyle(color: widget.pointColor, fontSize: 20, fontWeight: FontWeight.bold), // 팀 컬러 제목
-                ),
+                Text("비밀번호 변경", style: TextStyle(color: widget.pointColor, fontSize: 20, fontWeight: FontWeight.bold)),
                 if (!widget.isForced)
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close, color: Colors.white54),
-                  )
+                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close, color: Colors.white54))
               ],
             ),
             if (widget.isForced) ...[
               const SizedBox(height: 8),
-              const Text("임시 비밀번호로 로그인하셨습니다.\n보안을 위해 비밀번호를 변경해주세요.",
-                  style: TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.bold)
-              ),
+              const Text("임시 비밀번호로 로그인하셨습니다.\n보안을 위해 비밀번호를 변경해주세요.", style: TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.bold)),
             ],
             const SizedBox(height: 24),
             _buildTextField("현재 비밀번호 (임시 비밀번호)", _currentPasswordController),
@@ -419,15 +577,12 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
               child: ElevatedButton(
                 onPressed: _isLoading ? null : _changePassword,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: widget.pointColor, // 팀 컬러 버튼
-                  foregroundColor: Colors.white, // 텍스트 가시성을 위해 흰색 고정 (혹은 검정)
+                  backgroundColor: widget.pointColor,
+                  foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 child: _isLoading
-                    ? const SizedBox(
-                  width: 20, height: 20,
-                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                )
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                     : const Text("변경하기", style: TextStyle(fontWeight: FontWeight.bold)),
               ),
             )

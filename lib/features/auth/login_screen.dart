@@ -22,20 +22,85 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _isLoading = false;
   bool _keepLoggedIn = true;
 
+  // [New] 에러 발생 시 팝업을 띄우는 함수
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E).withOpacity(0.95), // 기존 다이얼로그 스타일 유지
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: const BorderSide(color: Colors.redAccent, width: 1.5) // 에러 강조 테두리
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 28),
+            const SizedBox(width: 12),
+            Text("로그인 실패", style: GoogleFonts.chakraPetch(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text(
+          message,
+          style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.5),
+        ),
+        actions: [
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text("확인", style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _submit() async {
+    final email = _emailCtrl.text.trim();
+    final password = _pwCtrl.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      _showErrorDialog("이메일과 비밀번호를 모두 입력해주세요.");
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
       if (_isLogin) {
-        await ref.read(authProvider.notifier).login(_emailCtrl.text.trim(), _pwCtrl.text.trim());
+        await ref.read(authProvider.notifier).login(email, password);
       } else {
-        await ref.read(authProvider.notifier).signUp(_emailCtrl.text.trim(), _pwCtrl.text.trim());
+        await ref.read(authProvider.notifier).signUp(email, password);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('가입 성공! 로그인해주세요.'), backgroundColor: Colors.green));
           setState(() => _isLogin = true);
         }
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent));
+      if (!mounted) return;
+
+      // [Modified] 에러 메시지 정제 및 팝업 호출
+      String errorMessage = e.toString();
+
+      // Supabase/Auth 관련 에러 메시지 한글화 (필요시 추가 가능)
+      if (errorMessage.contains("Invalid login credentials")) {
+        errorMessage = "이메일 또는 비밀번호가 올바르지 않습니다.";
+      } else if (errorMessage.contains("Email not confirmed")) {
+        errorMessage = "이메일 인증이 완료되지 않았습니다.";
+      } else if (errorMessage.contains("User already registered")) {
+        errorMessage = "이미 가입된 이메일입니다.";
+      } else {
+        // 'Exception: ' 접두사 제거
+        errorMessage = errorMessage.replaceAll("Exception: ", "");
+      }
+
+      _showErrorDialog(errorMessage);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -208,16 +273,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ... 기존 build 코드와 동일 (유지) ...
-    // (이전 답변의 LoginScreen build와 동일하므로 생략하지 않고 전체가 필요하면 이전 코드 복사 후 _showForgotPasswordDialog만 교체하세요.
-    // 편의상 이 블록 안에는 핵심 변경 사항인 _showForgotPasswordDialog가 중요합니다.)
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          Positioned(top: -100, left: -50, child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.purpleAccent.withValues(alpha: 0.4), boxShadow: [const BoxShadow(blurRadius: 150, color: Colors.purpleAccent)])))
+          Positioned(top: -100, left: -50, child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.purpleAccent.withOpacity(0.4), boxShadow: [const BoxShadow(blurRadius: 150, color: Colors.purpleAccent)])))
               .animate(onPlay: (c) => c.repeat(reverse: true)).scale(duration: 4.seconds, begin: const Offset(1, 1), end: const Offset(1.2, 1.2)),
-          Positioned(bottom: -50, right: -50, child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.cyanAccent.withValues(alpha: 0.3), boxShadow: [const BoxShadow(blurRadius: 150, color: Colors.cyanAccent)])))
+          Positioned(bottom: -50, right: -50, child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.cyanAccent.withOpacity(0.3), boxShadow: [const BoxShadow(blurRadius: 150, color: Colors.cyanAccent)])))
               .animate(onPlay: (c) => c.repeat(reverse: true)).moveY(duration: 5.seconds, begin: 0, end: 50),
 
           Center(
@@ -236,7 +298,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     width: double.infinity,
                     borderRadius: BorderRadius.circular(24),
                     borderWidth: 1.5,
-                    borderColor: Colors.white.withValues(alpha: 0.2),
+                    borderColor: Colors.white.withOpacity(0.2),
                     elevation: 20,
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
                     child: Column(
@@ -313,7 +375,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Widget _buildTextField(TextEditingController ctrl, String hint, IconData icon, bool obscure) {
     return Container(
-      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
+      decoration: BoxDecoration(color: Colors.black.withOpacity(0.3), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
       child: TextField(
         controller: ctrl, obscureText: obscure, style: const TextStyle(color: Colors.white), cursorColor: Colors.cyanAccent,
         decoration: InputDecoration(hintText: hint, hintStyle: const TextStyle(color: Colors.white38), prefixIcon: Icon(icon, color: Colors.white70), border: InputBorder.none, contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14)),

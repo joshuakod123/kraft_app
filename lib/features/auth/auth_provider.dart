@@ -99,6 +99,20 @@ class AuthNotifier extends Notifier<AuthStatus> {
     await Supabase.instance.client.auth.signOut();
     state = AuthStatus.unauthenticated;
   }
+
+  // [수정됨] 누락되었던 계정 삭제 기능 추가
+  Future<void> deleteAccount() async {
+    try {
+      // 1. Repository를 통해 DB 및 Auth에서 계정 삭제 요청
+      await _repo.deleteAccount();
+
+      // 2. 삭제 성공 시 앱 내에서도 로그아웃 처리 (상태 초기화)
+      await logout();
+    } catch (e) {
+      // 에러 발생 시 UI에서 알 수 있도록 rethrow
+      rethrow;
+    }
+  }
 }
 
 final authProvider = NotifierProvider<AuthNotifier, AuthStatus>(AuthNotifier.new);

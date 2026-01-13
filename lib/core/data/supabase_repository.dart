@@ -5,6 +5,7 @@ import 'package:just_audio_background/just_audio_background.dart';
 import 'package:path_provider/path_provider.dart';
 
 class SupabaseRepository {
+  // 클래스 내부에서 사용하는 Supabase 클라이언트 인스턴스 이름은 '_client'입니다.
   final SupabaseClient _client = Supabase.instance.client;
 
   User? get currentUser => _client.auth.currentUser;
@@ -144,6 +145,18 @@ class SupabaseRepository {
       return role == 'admin' || role == 'manager' || role == 'executive';
     } catch (e) {
       return false;
+    }
+  }
+
+  // ----------------------------------------------------------
+  // [계정 탈퇴 기능] (수정됨: _supabase -> _client)
+  // ----------------------------------------------------------
+  Future<void> deleteAccount() async {
+    try {
+      // Supabase SQL Editor에서 만든 'delete_account' 함수 호출
+      await _client.rpc('delete_account');
+    } catch (e) {
+      throw Exception('계정 삭제 실패: $e');
     }
   }
 
@@ -379,7 +392,6 @@ class SupabaseRepository {
       print('🎵 [Supabase] 노래 목록 Fetch 시작...');
 
       // 1. Supabase 'songs' 테이블 쿼리
-      // (테이블 이름이 정확한지, RLS 정책이 열려있는지 확인하세요)
       final List<dynamic> response = await _client
           .from('songs')
           .select('*')
@@ -396,11 +408,8 @@ class SupabaseRepository {
         final String rawPath = song['file_path'] ?? '';
         final String rawCover = song['cover_url'] ?? '';
 
-        // https://medium.com/@kskyung0624/%EC%83%9D%EC%84%B1%EC%9E%90%EC%97%90-%EC%9E%88%EB%8A%94-%EB%A1%9C%EC%A7%81-%EC%A3%BC%EB%AC%B4%EB%A5%B4%EA%B8%B0-9e7685a6ab91
         String audioUrl = rawPath;
         if (rawPath.isNotEmpty && !rawPath.startsWith('http')) {
-          // Storage 버킷 이름이 'songs'가 맞는지 확인하세요.
-          // public 버킷이어야 getPublicUrl이 정상 동작합니다.
           audioUrl = _client.storage.from('songs').getPublicUrl(rawPath);
         }
 
