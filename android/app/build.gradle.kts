@@ -1,10 +1,11 @@
 plugins {
     id("com.android.application")
-    id("kotlin-android") // 또는 id("org.jetbrains.kotlin.android")
-    // 필요한 플러그인이 있다면 여기에 더 있을 수 있습니다.
+    id("kotlin-android")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("dev.flutter.flutter-gradle-plugin")
 }
 
-// 1. key.properties 파일 불러오는 마법의 코드
+// [추가된 코드 1] key.properties 불러오기
 import java.util.Properties
         import java.io.FileInputStream
 
@@ -15,19 +16,32 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.joshuakod.kraft_app"// 본인의 패키지 이름인지 확인!
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    namespace = "com.joshuakod.kraft_app" // 아까 설정하신 ID로 맞춰드렸습니다.
+    compileSdk = 36 // [수정] 에러 해결을 위해 36으로 올림
+    ndkVersion = "27.0.12077973" // [수정] 에러 해결을 위해 명시함
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
+
+    sourceSets {
+        getByName("main").java.srcDirs("src/main/kotlin")
+    }
 
     defaultConfig {
-        applicationId = "com.joshuakod.kraft_app" // 본인의 앱 ID인지 확인!
-        minSdk = flutter.minSdkVersion
+        applicationId = "com.joshuakod.kraft_app" // [수정] ID 통일
+        minSdk = 23 // [수정] mobile_scanner 에러 해결을 위해 23으로 올림
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
-    // 2. 서명 설정 (도장 정보 가져오기)
+    // [추가된 코드 2] 서명 설정
     signingConfigs {
         create("release") {
             keyAlias = keystoreProperties["keyAlias"] as String
@@ -37,13 +51,12 @@ android {
         }
     }
 
-    // 3. 빌드 타입 설정 (여기가 아까 에러 났던 곳!)
     buildTypes {
-        getByName("release") {
+        release {
+            // [추가된 코드 3] 릴리즈 빌드에 서명 적용
             signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             isShrinkResources = false
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 }
