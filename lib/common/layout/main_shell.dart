@@ -190,9 +190,12 @@ class _NavBarIcon extends ConsumerWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {
-        // [수정 5] 뮤직 탭(index 3) 클릭 시 플레이어 확장 로직 제거
-        // 노래 재생 여부와 관계없이 항상 '/stream' 리스트 페이지로 이동하도록 변경
-        // 이렇게 하면 뮤직 리스트를 보면서 하단 미니 플레이어로 조작이 가능해집니다.
+        // [수정 5] 뮤직 탭(index 3) 클릭 시 무조건 플레이어를 축소하고 리스트로 이동
+        if (index == 3) {
+          ref.read(isPlayerExpandedProvider.notifier).state = false; // 플레이어 축소
+          context.go(path); // 리스트 화면으로 이동
+          return;
+        }
         context.go(path);
       },
       child: SizedBox(

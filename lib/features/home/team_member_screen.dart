@@ -9,7 +9,6 @@ import '../../core/data/supabase_repository.dart';
 import '../../core/state/global_providers.dart';
 
 // [추가] 현재 화면에서 보고 있는 팀을 관리하는 Provider
-// 초기값은 로그인한 유저의 부서(currentDeptProvider)로 설정합니다.
 final viewedDeptProvider = StateProvider.autoDispose<Department>((ref) {
   return ref.watch(currentDeptProvider);
 });
@@ -25,9 +24,11 @@ class TeamMemberScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // 이제 화면 UI는 '현재 보고 있는 팀(viewedDept)'을 기준으로 그려집니다.
     final viewedDept = ref.watch(viewedDeptProvider);
     final membersAsync = ref.watch(teamMembersProvider);
+
+    // [수정 6] 상태바 높이와 툴바 높이를 동적으로 계산
+    final topPadding = MediaQuery.of(context).padding.top + kToolbarHeight + 10;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -35,13 +36,11 @@ class TeamMemberScreen extends ConsumerWidget {
       appBar: AppBar(
         backgroundColor: Colors.black.withOpacity(0.7),
         elevation: 0,
-        // [수정 포인트] 타이틀을 클릭 가능한 메뉴로 변경
         title: PopupMenuButton<Department>(
           offset: const Offset(0, 45),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           color: const Color(0xFF1E1E1E),
           onSelected: (Department selected) {
-            // 클릭한 팀으로 화면 상태 업데이트
             ref.read(viewedDeptProvider.notifier).state = selected;
           },
           child: Row(
@@ -58,7 +57,6 @@ class TeamMemberScreen extends ConsumerWidget {
               const Icon(Icons.keyboard_arrow_down, color: Colors.white70, size: 20),
             ],
           ),
-          // Enum에 정의된 모든 부서 목록을 메뉴로 생성
           itemBuilder: (context) => Department.values.map((dept) {
             return PopupMenuItem<Department>(
               value: dept,
@@ -99,7 +97,8 @@ class TeamMemberScreen extends ConsumerWidget {
           data: (members) {
             return Column(
               children: [
-                const SizedBox(height: 100),
+                // [수정 6] 동적으로 계산된 상단 여백 적용
+                SizedBox(height: topPadding),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
                   child: Row(
@@ -150,6 +149,7 @@ class TeamMemberScreen extends ConsumerWidget {
   }
 
   Widget _buildMemberTile(BuildContext context, Map<String, dynamic> user, Department dept) {
+    // ... (기존 코드와 동일)
     final name = user['name'] ?? 'Unknown';
     final email = user['email'] ?? '';
     final role = user['role'] ?? 'member';
@@ -274,9 +274,6 @@ class TeamMemberScreen extends ConsumerWidget {
   }
 }
 
-// -----------------------------------------------------------------------------
-// 상세 프로필 팝업 카드 (기존 코드 유지 및 성별 추가)
-// -----------------------------------------------------------------------------
 class MemberProfileCard extends StatelessWidget {
   final Map<String, dynamic> user;
   final Department dept;
@@ -289,6 +286,7 @@ class MemberProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ... (기존 상세 프로필 코드와 동일)
     final name = user['name'] ?? '알 수 없음';
     final email = user['email'] ?? '-';
     final major = user['major'] ?? '전공 미입력';
@@ -298,8 +296,6 @@ class MemberProfileCard extends StatelessWidget {
     final initial = name.isNotEmpty ? name.substring(0, 1) : '?';
     final cohort = user['cohort'];
     final generationString = cohort != null ? "${cohort}기" : "기수 미정";
-
-    // [수정] 성별 데이터 가져오기 (DB 컬럼이 'gender'라고 가정)
     final gender = user['gender'] ?? '비공개';
 
     final isManager = role == 'manager';
@@ -411,12 +407,10 @@ class MemberProfileCard extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Column(
                       children: [
-                        // [수정] 학번, 성별, 기수를 한 줄에 배치
                         Row(
                           children: [
                             Expanded(child: _buildInfoBox("학번", studentId, Icons.badge_outlined)),
                             const SizedBox(width: 8),
-                            // 성별 박스 추가
                             Expanded(child: _buildInfoBox("성별", gender, Icons.wc)),
                             const SizedBox(width: 8),
                             Expanded(child: _buildInfoBox("기수", generationString, Icons.school_outlined)),

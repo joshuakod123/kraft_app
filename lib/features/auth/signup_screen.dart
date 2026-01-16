@@ -1,45 +1,69 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/data/supabase_repository.dart';
 
-class SignupScreen extends ConsumerStatefulWidget {
+class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
 
   @override
-  ConsumerState<SignupScreen> createState() => _SignupScreenState();
+  State<SignupScreen> createState() => _SignupScreenState();
 }
 
-class _SignupScreenState extends ConsumerState<SignupScreen> {
+class _SignupScreenState extends State<SignupScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
+  final _nameController = TextEditingController();
+  final _studentIdController = TextEditingController();
+  final _majorController = TextEditingController();
+  final _schoolController = TextEditingController();
+
+  // 기수 선택 (Dropdown)
+  int _selectedCohort = 1;
+
   bool _isLoading = false;
 
-  Future<void> _signUp() async {
-    if (_passwordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Passwords do not match"), backgroundColor: Colors.red));
-      return;
-    }
+  // [수정 12] 에러/성공 팝업 함수
+  void _showPopup(String title, String message, {bool isSuccess = false}) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(title, style: TextStyle(color: isSuccess ? Colors.greenAccent : Colors.redAccent, fontWeight: FontWeight.bold)),
+        content: Text(message, style: const TextStyle(color: Colors.white)),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              if (isSuccess) context.go('/login'); // 성공 시 로그인 화면으로
+            },
+            child: const Text('확인', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
 
+  Future<void> _handleSignup() async {
     setState(() => _isLoading = true);
     try {
-      final error = await SupabaseRepository().signUp(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+      await SupabaseRepository().signUp(
+        _emailController.text.trim(),
+        _passwordController.text.trim(),
+        _nameController.text.trim(),
+        _selectedCohort,
+        _majorController.text.trim(),
+        _schoolController.text.trim(),
+        _studentIdController.text.trim(),
       );
-
-      if (error != null) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), backgroundColor: Colors.red));
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Account created! Please log in."), backgroundColor: Colors.green));
-          context.pop(); // 로그인 화면으로 복귀
-        }
-      }
+      if (!mounted) return;
+      _showPopup("회원가입 성공", "회원가입이 완료되었습니다.\n로그인해주세요.", isSuccess: true);
+    } on AuthException catch (e) {
+      _showPopup("오류", e.message);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+      _showPopup("오류", "알 수 없는 오류가 발생했습니다: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -49,42 +73,68 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
+      // [수정 9] 뒤로가기 버튼을 위한 AppBar 추가
       appBar: AppBar(
-        backgroundColor: Colors.black,
-        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => context.pop()),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+          onPressed: () => context.canPop() ? context.pop() : context.go('/login'),
+        ),
       ),
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(32.0),
+          padding: const EdgeInsets.symmetric(horizontal: 32),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('JOIN KRAFT', style: GoogleFonts.chakraPetch(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1.5), textAlign: TextAlign.center),
-              const SizedBox(height: 8),
-              Text('Create your account', style: GoogleFonts.inter(fontSize: 14, color: Colors.white54), textAlign: TextAlign.center),
+              Text("JOIN KRAFT", style: GoogleFonts.chakraPetch(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
               const SizedBox(height: 40),
 
-              _buildFancyTextField(_emailController, 'Email', Icons.email_outlined),
+              _buildTextField("이메일", _emailController),
               const SizedBox(height: 16),
-              _buildFancyTextField(_passwordController, 'Password', Icons.lock_outline, obscureText: true),
+              _buildTextField("비밀번호", _passwordController, obscureText: true),
               const SizedBox(height: 16),
-              _buildFancyTextField(_confirmPasswordController, 'Confirm Password', Icons.lock_reset, obscureText: true),
+              _buildTextField("이름", _nameController),
+              const SizedBox(height: 16),
 
-              const SizedBox(height: 32),
-
-              ElevatedButton(
-                onPressed: _isLoading ? null : _signUp,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.cyanAccent,
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  elevation: 5,
+              // 기수 선택 드롭다운
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(12)),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    value: _selectedCohort,
+                    dropdownColor: const Color(0xFF1E1E1E),
+                    isExpanded: true,
+                    style: const TextStyle(color: Colors.white),
+                    items: [1, 2, 3, 4, 5].map((e) => DropdownMenuItem(value: e, child: Text("$e기"))).toList(),
+                    onChanged: (val) => setState(() => _selectedCohort = val!),
+                  ),
                 ),
-                child: _isLoading
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                    : Text('SIGN UP', style: GoogleFonts.chakraPetch(fontWeight: FontWeight.bold, fontSize: 16)),
+              ),
+              const SizedBox(height: 16),
+              _buildTextField("학교", _schoolController),
+              const SizedBox(height: 16),
+              _buildTextField("전공", _majorController),
+              const SizedBox(height: 16),
+              _buildTextField("학번", _studentIdController),
+              const SizedBox(height: 40),
+
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _handleSignup,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                      : const Text("회원가입", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
               ),
             ],
           ),
@@ -93,19 +143,18 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     );
   }
 
-  Widget _buildFancyTextField(TextEditingController controller, String label, IconData icon, {bool obscureText = false}) {
+  Widget _buildTextField(String label, TextEditingController controller, {bool obscureText = false}) {
     return TextField(
       controller: controller,
       obscureText: obscureText,
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: Colors.grey),
-        prefixIcon: Icon(icon, color: Colors.grey),
+        labelStyle: TextStyle(color: Colors.grey[600]),
         filled: true,
         fillColor: const Color(0xFF1E1E1E),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.cyanAccent, width: 1)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
     );
   }

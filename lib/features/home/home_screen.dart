@@ -36,7 +36,7 @@ class HomeScreen extends ConsumerWidget {
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.admin_panel_settings_outlined, size: 28),
                   tooltip: '임원진 메뉴',
-                  color: const Color(0xFF1E1E1E), // 팝업 배경색 지정 (다크 테마)
+                  color: const Color(0xFF1E1E1E), // 팝업 배경색 (어두운 색)
                   onSelected: (value) {
                     if (value == 'qr') {
                       context.push('/qr_create');
@@ -49,9 +49,9 @@ class HomeScreen extends ConsumerWidget {
                       value: 'qr',
                       child: Row(
                         children: [
-                          Icon(Icons.qr_code_2, color: Colors.white), // black87 -> white
+                          Icon(Icons.qr_code_2, color: Colors.white), // 흰색 아이콘
                           SizedBox(width: 10),
-                          Text('출석 QR 생성', style: TextStyle(color: Colors.white)), // black87 -> white
+                          Text('출석 QR 생성', style: TextStyle(color: Colors.white)), // 흰색 텍스트
                         ],
                       ),
                     ),
@@ -59,16 +59,15 @@ class HomeScreen extends ConsumerWidget {
                       value: 'list',
                       child: Row(
                         children: [
-                          Icon(Icons.list_alt, color: Colors.white), // black87 -> white
+                          Icon(Icons.list_alt, color: Colors.white), // 흰색 아이콘
                           SizedBox(width: 10),
-                          Text('출석 명단 확인', style: TextStyle(color: Colors.white)), // black87 -> white
+                          Text('출석 명단 확인', style: TextStyle(color: Colors.white)), // 흰색 텍스트
                         ],
                       ),
                     ),
                   ],
                 ),
 
-              // 일반 회원용 QR 스캔 아이콘
               IconButton(icon: const Icon(Icons.qr_code_scanner), onPressed: () => context.push('/attendance_scan')),
               const SizedBox(width: 8),
             ],

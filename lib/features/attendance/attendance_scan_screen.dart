@@ -1,8 +1,9 @@
-import 'dart:convert'; // JSON Decode용
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart'; // [필수] pubspec.yaml에 패키지 추가 필요
 
 import '../../core/data/supabase_repository.dart';
 import 'widgets/scanner_overlay.dart';
@@ -39,14 +40,10 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
     HapticFeedback.mediumImpact();
 
     try {
-      // 1. JSON 데이터 파싱
-      // 예: {"s": "1주차 세션", "t": "A팀"}
       final Map<String, dynamic> data = jsonDecode(rawData);
-
       final String sessionName = data['s'] ?? '알 수 없는 세션';
       final String teamName = data['t'] ?? '알 수 없는 팀';
 
-      // 2. Repository 호출
       await SupabaseRepository().markAttendance(
         sessionName: sessionName,
         teamName: teamName,
@@ -54,7 +51,6 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
 
       if (!mounted) return;
 
-      // 3. 성공 알림
       await showDialog(
         context: context,
         barrierDismissible: false,
@@ -74,8 +70,8 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(context); // Dialog 닫기
-                context.pop(); // 화면 닫고 나가기
+                Navigator.pop(context);
+                context.pop();
               },
               child: const Text('확인'),
             ),
@@ -84,12 +80,9 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
       );
 
     } catch (e) {
-      // 4. 실패 처리
       if (!mounted) return;
 
       String errorMessage = '스캔한 코드가 올바르지 않습니다.';
-
-      // JSON 파싱 에러인지 확인
       if (e is FormatException) {
         errorMessage = '이 앱의 출석 QR코드가 아닙니다.';
       } else {
@@ -103,7 +96,6 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
         ),
       );
 
-      // 잠시 후 다시 스캔 가능하도록 설정
       await Future.delayed(const Duration(seconds: 2));
       if (mounted) {
         setState(() {
@@ -115,7 +107,6 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ... UI 코드는 기존과 거의 동일합니다 ...
     final scanSize = MediaQuery.of(context).size.width * 0.7;
     final scanWindow = Rect.fromCenter(
       center: Offset(
@@ -156,6 +147,37 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
             controller: _cameraController,
             scanWindow: scanWindow,
             onDetect: _handleBarcode,
+            // [수정] errorBuilder의 인자를 3개에서 2개로 변경 (child 제거)
+            errorBuilder: (context, error) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.videocam_off_outlined, color: Colors.white54, size: 60),
+                    const SizedBox(height: 16),
+                    const Text(
+                      '카메라 권한이 없습니다.',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      '출석 체크를 위해 설정에서\n카메라 권한을 허용해주세요.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white54, fontSize: 14),
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      onPressed: () => openAppSettings(), // permission_handler 필요
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black,
+                      ),
+                      child: const Text("설정으로 이동"),
+                    )
+                  ],
+                ),
+              );
+            },
           ),
           ScannerOverlay(scanWindow: scanWindow),
           if (_isProcessing)
