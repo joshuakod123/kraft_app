@@ -42,8 +42,11 @@ class _MainShellState extends ConsumerState<MainShell> {
     final currentSong = ref.watch(currentSongProvider);
     final isExpanded = ref.watch(isPlayerExpandedProvider);
 
+    // 아이폰 하단 홈바(Safe Area) 높이 계산
+    final double bottomSafeArea = MediaQuery.of(context).padding.bottom;
+
     // 미니 플레이어가 있을 때 바닥 여백을 충분히 줍니다.
-    final double contentBottomPadding = currentSong != null ? 180.0 : 100.0;
+    final double contentBottomPadding = (currentSong != null ? 180.0 : 100.0) + bottomSafeArea;
 
     return PopScope(
       canPop: !isExpanded,
@@ -79,11 +82,9 @@ class _MainShellState extends ConsumerState<MainShell> {
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeInOut,
                 top: isExpanded ? 0 : null,
-                // 탭바(85) + 여백(10) 정도 띄워서 배치
-                bottom: isExpanded ? 0 : 95,
+                bottom: isExpanded ? 0 : (95 + bottomSafeArea),
                 left: 0,
                 right: 0,
-                // [수정] 높이를 64 -> 74로 늘려서 구겨짐 방지
                 height: isExpanded ? null : 74,
                 child: GestureDetector(
                   onVerticalDragEnd: (details) {
@@ -121,11 +122,15 @@ class _MainShellState extends ConsumerState<MainShell> {
   }
 
   Widget _buildGlassNavBar(int currentIndex) {
+    final double bottomPadding = MediaQuery.of(context).padding.bottom;
+    const double navBarHeight = 85.0;
+
     return ClipRRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
-          height: 85,
+          height: navBarHeight + bottomPadding,
+          padding: EdgeInsets.only(bottom: bottomPadding),
           decoration: BoxDecoration(
             color: Colors.black.withOpacity(0.75),
             border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1), width: 0.5)),
@@ -185,14 +190,9 @@ class _NavBarIcon extends ConsumerWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {
-        if (index == 3) {
-          if (ref.read(currentSongProvider) != null) {
-            ref.read(isPlayerExpandedProvider.notifier).state = true;
-          } else {
-            context.go(path);
-          }
-          return;
-        }
+        // [수정 5] 뮤직 탭(index 3) 클릭 시 플레이어 확장 로직 제거
+        // 노래 재생 여부와 관계없이 항상 '/stream' 리스트 페이지로 이동하도록 변경
+        // 이렇게 하면 뮤직 리스트를 보면서 하단 미니 플레이어로 조작이 가능해집니다.
         context.go(path);
       },
       child: SizedBox(
@@ -229,7 +229,6 @@ class _NavBarIcon extends ConsumerWidget {
   }
 }
 
-// [수정됨] 찌그러짐 방지를 위해 ListTile 대신 Row 사용
 class _MiniPlayer extends ConsumerWidget {
   final MediaItem song;
   const _MiniPlayer({required this.song});
@@ -237,8 +236,8 @@ class _MiniPlayer extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 0), // 수직 마진 제거
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), // 내부 패딩으로 조절
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color: const Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(16),
@@ -250,7 +249,6 @@ class _MiniPlayer extends ConsumerWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // 1. 앨범 아트
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: SizedBox(
@@ -260,15 +258,12 @@ class _MiniPlayer extends ConsumerWidget {
                   : Container(color: Colors.grey[800], child: const Icon(Icons.music_note, color: Colors.white54)),
             ),
           ),
-
           const SizedBox(width: 12),
-
-          // 2. 제목 & 가수 (공간 차지)
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min, // 최소 높이만 사용
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   song.title,
@@ -286,8 +281,6 @@ class _MiniPlayer extends ConsumerWidget {
               ],
             ),
           ),
-
-          // 3. 컨트롤 버튼
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -298,8 +291,8 @@ class _MiniPlayer extends ConsumerWidget {
                   return IconButton(
                     icon: Icon(playing ? Icons.pause_circle_filled : Icons.play_circle_fill, color: Colors.white),
                     iconSize: 32,
-                    padding: EdgeInsets.zero, // 패딩 제거로 공간 확보
-                    constraints: const BoxConstraints(), // 최소 크기 제약 해제
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                     onPressed: playing ? KraftAudioService.pause : KraftAudioService.resume,
                   );
                 },

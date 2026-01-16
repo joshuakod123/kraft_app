@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../../../core/constants/department_enum.dart';
 import '../../../core/data/supabase_repository.dart';
 import '../../../core/state/global_providers.dart';
+import '../../admin/manager_provider.dart'; // isManagerProvider 경로 확인 필요
 
 // 공지사항 스트림 프로바이더
 final noticeStreamProvider = StreamProvider.family<List<Map<String, dynamic>>, int>((ref, teamId) {
@@ -25,45 +26,83 @@ class DeptNoticeCard extends ConsumerStatefulWidget {
 
 class _DeptNoticeCardState extends ConsumerState<DeptNoticeCard> {
   final _noticeController = TextEditingController();
+  final _titleController = TextEditingController(); // [추가] 제목 입력 컨트롤러
 
-  // Dialog 로직: HomeScreen에 있는 것과 동일하게 작동하도록 구성
+  // [수정 2] 다이얼로그 너비 넓게 수정
   void _showAddNoticeDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E1E),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16), // 좌우 여백을 줄여서 너비를 확보
         title: Text('새 공지 작성', style: GoogleFonts.chakraPetch(color: Colors.white)),
-        content: TextField(
-          controller: _noticeController,
-          style: const TextStyle(color: Colors.white),
-          decoration: InputDecoration(
-            hintText: '내용을 입력하세요',
-            hintStyle: TextStyle(color: Colors.grey[600]),
-            filled: true,
-            fillColor: Colors.black54,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        content: SizedBox(
+          width: double.maxFinite, // 내부 컨텐츠가 가능한 최대 너비를 차지하도록 설정
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 제목 입력 필드 추가 (이전 코드에서 누락된 부분 보완)
+              TextField(
+                controller: _titleController,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: '제목',
+                  labelStyle: TextStyle(color: Colors.grey[600]),
+                  filled: true,
+                  fillColor: Colors.black54,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // 내용 입력 필드
+              TextField(
+                controller: _noticeController,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: '내용',
+                  labelStyle: TextStyle(color: Colors.grey[600]),
+                  filled: true,
+                  fillColor: Colors.black54,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  alignLabelWithHint: true,
+                ),
+                maxLines: 5, // 줄 수 늘림
+              ),
+            ],
           ),
-          maxLines: 3,
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              _titleController.clear();
+              _noticeController.clear();
+              Navigator.pop(context);
+            },
             child: const Text('취소', style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
             onPressed: () async {
-              if (_noticeController.text.isNotEmpty) {
-                // [수정] 제목, 내용, ID 순서 및 타입 준수
-                await SupabaseRepository().addNotice("Notice", _noticeController.text, widget.dept.id);
+              if (_noticeController.text.isNotEmpty && _titleController.text.isNotEmpty) {
+                await SupabaseRepository().addNotice(
+                    _titleController.text,
+                    _noticeController.text,
+                    widget.dept.id
+                );
 
                 if (mounted) {
                   ref.invalidate(noticeStreamProvider(widget.dept.id));
                   Navigator.pop(context);
+                  _titleController.clear();
                   _noticeController.clear();
                 }
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: widget.dept.color, foregroundColor: Colors.black),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: widget.dept.color,
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
             child: const Text('등록', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
@@ -167,8 +206,6 @@ class _DeptNoticeCardState extends ConsumerState<DeptNoticeCard> {
               );
             }
 
-            // 가장 최신 공지 하나만 보여주거나 리스트로 보여줄 수 있음
-            // 여기서는 카드 형태로 최신 공지 표시
             final notice = notices.first;
             final noticeId = notice['id'];
 
@@ -211,7 +248,7 @@ class _DeptNoticeCardState extends ConsumerState<DeptNoticeCard> {
           },
         ),
 
-        // [수정] 매니저용 하단 추가 버튼 (디자인 개선)
+        // [수정 3] 매니저용 공지 작성 버튼 (이곳으로 일원화)
         if (isManager)
           Padding(
             padding: const EdgeInsets.only(top: 16.0),
@@ -226,7 +263,6 @@ class _DeptNoticeCardState extends ConsumerState<DeptNoticeCard> {
                   border: Border.all(
                     color: widget.dept.color.withValues(alpha: 0.3),
                     width: 1.5,
-                    style: BorderStyle.solid, // Flutter 기본 Border로는 점선이 안되어 투명도 조절로 대체
                   ),
                 ),
                 child: Row(

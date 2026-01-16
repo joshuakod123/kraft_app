@@ -4,67 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/constants/department_enum.dart';
 import '../../core/state/global_providers.dart';
-import '../../core/data/supabase_repository.dart';
+import '../../features/admin/manager_provider.dart';
 import 'widgets/dept_notice_card.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
-
-  void _showAddNoticeDialog(BuildContext context, WidgetRef ref, int teamId) {
-    final titleCtrl = TextEditingController();
-    final contentCtrl = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text("공지사항 등록", style: TextStyle(color: Colors.white)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: titleCtrl,
-              decoration: const InputDecoration(
-                labelText: '제목',
-                labelStyle: TextStyle(color: Colors.grey),
-                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
-                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white)),
-              ),
-              style: const TextStyle(color: Colors.white),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: contentCtrl,
-              decoration: const InputDecoration(
-                labelText: '내용',
-                labelStyle: TextStyle(color: Colors.grey),
-                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
-                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white)),
-              ),
-              style: const TextStyle(color: Colors.white),
-              maxLines: 3,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("취소")),
-          ElevatedButton(
-            onPressed: () async {
-              if (titleCtrl.text.isNotEmpty) {
-                await SupabaseRepository().addNotice(titleCtrl.text, contentCtrl.text, teamId);
-                if (context.mounted) {
-                  Navigator.pop(context);
-                  ref.invalidate(noticeStreamProvider(teamId));
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black),
-            child: const Text("등록"),
-          )
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -87,11 +31,12 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
             actions: [
-              // [수정] 관리자(임원)일 경우 메뉴 버튼 표시 (QR 생성 / 명단 확인)
+              // [수정 4] 팝업 메뉴 아이템의 텍스트/아이콘 색상을 흰색으로 변경하여 가독성 개선
               if (isManager)
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.admin_panel_settings_outlined, size: 28),
                   tooltip: '임원진 메뉴',
+                  color: const Color(0xFF1E1E1E), // 팝업 배경색 지정 (다크 테마)
                   onSelected: (value) {
                     if (value == 'qr') {
                       context.push('/qr_create');
@@ -104,9 +49,9 @@ class HomeScreen extends ConsumerWidget {
                       value: 'qr',
                       child: Row(
                         children: [
-                          Icon(Icons.qr_code_2, color: Colors.black87),
+                          Icon(Icons.qr_code_2, color: Colors.white), // black87 -> white
                           SizedBox(width: 10),
-                          Text('출석 QR 생성', style: TextStyle(color: Colors.black87)),
+                          Text('출석 QR 생성', style: TextStyle(color: Colors.white)), // black87 -> white
                         ],
                       ),
                     ),
@@ -114,9 +59,9 @@ class HomeScreen extends ConsumerWidget {
                       value: 'list',
                       child: Row(
                         children: [
-                          Icon(Icons.list_alt, color: Colors.black87),
+                          Icon(Icons.list_alt, color: Colors.white), // black87 -> white
                           SizedBox(width: 10),
-                          Text('출석 명단 확인', style: TextStyle(color: Colors.black87)),
+                          Text('출석 명단 확인', style: TextStyle(color: Colors.white)), // black87 -> white
                         ],
                       ),
                     ),
@@ -139,18 +84,6 @@ class HomeScreen extends ConsumerWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text('NOTICE', style: TextStyle(color: dept.color, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                      if (isManager)
-                        FilledButton.tonalIcon(
-                          onPressed: () => _showAddNoticeDialog(context, ref, dept.id),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: dept.color.withValues(alpha: 0.2),
-                            foregroundColor: dept.color,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            minimumSize: const Size(0, 36),
-                          ),
-                          icon: const Icon(Icons.edit, size: 16),
-                          label: Text("POST", style: GoogleFonts.chakraPetch(fontWeight: FontWeight.bold)),
-                        ),
                     ],
                   ),
                   const SizedBox(height: 10),
