@@ -129,7 +129,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  // [기능 2] 프로필 수정 다이얼로그
+  // [기능 2] 프로필 수정 다이얼로그 (수정됨: Feedback 10 적용)
   void _showEditProfileDialog(Map<String, dynamic> user, Color pointColor) {
     final nameController = TextEditingController(text: user['name']);
     final majorController = TextEditingController(text: user['major']);
@@ -178,16 +178,45 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 );
 
                 if (context.mounted) {
-                  Navigator.pop(context);
+                  Navigator.pop(context); // 수정 입력창 닫기
                   _refreshProfile(); // 화면 새로고침
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("프로필이 수정되었습니다.")),
+
+                  // [수정] SnackBar 대신 Dialog 팝업 사용
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      backgroundColor: const Color(0xFF1E1E1E),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: BorderSide(color: pointColor, width: 1.5)
+                      ),
+                      title: const Text("수정 완료", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      content: const Text("프로필 정보가 성공적으로 수정되었습니다.", style: TextStyle(color: Colors.white70)),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text("확인", style: TextStyle(color: Colors.white)),
+                        )
+                      ],
+                    ),
                   );
                 }
               } catch (e) {
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("수정 실패: $e")),
+                  // 에러 발생 시에도 팝업으로 알림
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      backgroundColor: const Color(0xFF1E1E1E),
+                      title: const Text("오류", style: TextStyle(color: Colors.redAccent)),
+                      content: Text("수정 실패: $e", style: const TextStyle(color: Colors.white70)),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text("확인", style: TextStyle(color: Colors.white)),
+                        )
+                      ],
+                    ),
                   );
                 }
               }

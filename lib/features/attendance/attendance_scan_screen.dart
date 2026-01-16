@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:go_router/go_router.dart';
-import 'package:permission_handler/permission_handler.dart'; // [필수] pubspec.yaml에 패키지 추가 필요
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/data/supabase_repository.dart';
 import 'widgets/scanner_overlay.dart';
@@ -15,12 +15,37 @@ class AttendanceScanScreen extends StatefulWidget {
   State<AttendanceScanScreen> createState() => _AttendanceScanScreenState();
 }
 
-class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
+class _AttendanceScanScreenState extends State<AttendanceScanScreen> with WidgetsBindingObserver {
   bool _isProcessing = false;
   final MobileScannerController _cameraController = MobileScannerController();
+  bool _isPermissionGranted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _checkPermission();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkPermission();
+    }
+  }
+
+  Future<void> _checkPermission() async {
+    final status = await Permission.camera.status;
+    if (mounted) {
+      setState(() {
+        _isPermissionGranted = status.isGranted;
+      });
+    }
+  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _cameraController.dispose();
     super.dispose();
   }
@@ -73,7 +98,7 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
                 Navigator.pop(context);
                 context.pop();
               },
-              child: const Text('확인'),
+              child: const Text('확인', style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
@@ -89,10 +114,18 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
         errorMessage = e.toString().replaceAll('Exception: ', '');
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(errorMessage),
-          backgroundColor: Colors.redAccent,
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF1E1E1E),
+          title: const Text("오류", style: TextStyle(color: Colors.redAccent)),
+          content: Text(errorMessage, style: const TextStyle(color: Colors.white)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("확인", style: TextStyle(color: Colors.white)),
+            )
+          ],
         ),
       );
 
@@ -147,34 +180,42 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> {
             controller: _cameraController,
             scanWindow: scanWindow,
             onDetect: _handleBarcode,
-            // [수정] errorBuilder의 인자를 3개에서 2개로 변경 (child 제거)
+            // [수정 완료] 인자를 (context, error) 2개만 받도록 수정했습니다.
             errorBuilder: (context, error) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.videocam_off_outlined, color: Colors.white54, size: 60),
-                    const SizedBox(height: 16),
-                    const Text(
-                      '카메라 권한이 없습니다.',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      '출석 체크를 위해 설정에서\n카메라 권한을 허용해주세요.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white54, fontSize: 14),
-                    ),
-                    const SizedBox(height: 24),
-                    ElevatedButton(
-                      onPressed: () => openAppSettings(), // permission_handler 필요
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black,
+              return Container(
+                color: Colors.black,
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.videocam_off_outlined, color: Colors.white54, size: 60),
+                      const SizedBox(height: 24),
+                      const Text(
+                        '카메라 권한이 없습니다.',
+                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                       ),
-                      child: const Text("설정으로 이동"),
-                    )
-                  ],
+                      const SizedBox(height: 8),
+                      const Text(
+                        '출석 체크를 위해 설정에서\n카메라 권한을 허용해주세요.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white54, fontSize: 14),
+                      ),
+                      const SizedBox(height: 32),
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          await openAppSettings();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        ),
+                        icon: const Icon(Icons.settings),
+                        label: const Text("설정으로 이동하여 권한 허용"),
+                      )
+                    ],
+                  ),
                 ),
               );
             },

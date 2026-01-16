@@ -4,7 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:glass_kit/glass_kit.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../core/constants/department_enum.dart'; // Department enum import 필수
+import '../../core/constants/department_enum.dart';
 import '../../core/data/supabase_repository.dart';
 import 'auth_provider.dart';
 
@@ -22,16 +22,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _isLoading = false;
   bool _keepLoggedIn = true;
 
-  // [New] 에러 발생 시 팝업을 띄우는 함수
   void _showErrorDialog(String message) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E).withOpacity(0.95), // 기존 다이얼로그 스타일 유지
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-            side: const BorderSide(color: Colors.redAccent, width: 1.5) // 에러 강조 테두리
-        ),
+        backgroundColor: const Color(0xFF1E1E1E).withOpacity(0.95),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Colors.redAccent, width: 1.5)),
         title: Row(
           children: [
             const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 28),
@@ -39,21 +35,44 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             Text("로그인 실패", style: GoogleFonts.chakraPetch(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
           ],
         ),
-        content: Text(
-          message,
-          style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.5),
-        ),
+        content: Text(message, style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.5)),
         actions: [
           SizedBox(
             width: double.infinity,
             height: 48,
             child: ElevatedButton(
               onPressed: () => Navigator.pop(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              child: const Text("확인", style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // [Feedback 12] 성공 팝업
+  void _showSuccessDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E).withOpacity(0.95),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Colors.greenAccent, width: 1.5)),
+        title: Row(
+          children: [
+            const Icon(Icons.check_circle_outline_rounded, color: Colors.greenAccent, size: 28),
+            const SizedBox(width: 12),
+            Text("성공", style: GoogleFonts.chakraPetch(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text(message, style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.5)),
+        actions: [
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.greenAccent, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
               child: const Text("확인", style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ),
@@ -78,17 +97,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       } else {
         await ref.read(authProvider.notifier).signUp(email, password);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('가입 성공! 로그인해주세요.'), backgroundColor: Colors.green));
+          // [Feedback 12] 팝업으로 변경
+          _showSuccessDialog('가입 성공! 로그인해주세요.');
           setState(() => _isLogin = true);
         }
       }
     } catch (e) {
       if (!mounted) return;
-
-      // [Modified] 에러 메시지 정제 및 팝업 호출
       String errorMessage = e.toString();
-
-      // Supabase/Auth 관련 에러 메시지 한글화 (필요시 추가 가능)
       if (errorMessage.contains("Invalid login credentials")) {
         errorMessage = "이메일 또는 비밀번호가 올바르지 않습니다.";
       } else if (errorMessage.contains("Email not confirmed")) {
@@ -96,45 +112,35 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       } else if (errorMessage.contains("User already registered")) {
         errorMessage = "이미 가입된 이메일입니다.";
       } else {
-        // 'Exception: ' 접두사 제거
         errorMessage = errorMessage.replaceAll("Exception: ", "");
       }
-
       _showErrorDialog(errorMessage);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // [Modified] 비밀번호 찾기 다이얼로그 (팀 컬러 반영)
+  // 비밀번호 찾기 다이얼로그 (이전 코드 유지)
   void _showForgotPasswordDialog() {
     final emailCtrl = TextEditingController();
     final nameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
     bool isDialogLoading = false;
-
-    // 결과값 저장용
     String? tempPasswordResult;
-    Color? teamColorResult; // 팀 색상 저장
+    Color? teamColorResult;
 
     showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
-            // 결과가 있으면 그 색상, 없으면 기본 Cyan
             final activeColor = teamColorResult ?? Colors.cyanAccent;
-
             return Dialog(
               backgroundColor: const Color(0xFF1E1E1E).withOpacity(0.95),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  side: BorderSide(color: activeColor.withOpacity(0.5), width: 1.5) // 테두리 색상 동적 변경
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: activeColor.withOpacity(0.5), width: 1.5)),
               child: Padding(
                 padding: const EdgeInsets.all(24.0),
                 child: tempPasswordResult != null
-                // [Step 2] 결과 화면 (동적 컬러 적용)
                     ? Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -142,46 +148,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     const SizedBox(height: 16),
                     Text("임시 비밀번호 발급", style: GoogleFonts.chakraPetch(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 12),
-                    const Text("아래 비밀번호로 로그인해주세요.\n로그인 후 즉시 비밀번호 변경창이 뜹니다.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white70, fontSize: 13),
-                    ),
+                    const Text("아래 비밀번호로 로그인해주세요.\n로그인 후 즉시 비밀번호 변경창이 뜹니다.", textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 13)),
                     const SizedBox(height: 20),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: activeColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: activeColor),
-                      ),
-                      child: SelectableText(
-                        tempPasswordResult!,
-                        style: TextStyle(color: activeColor, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 2),
-                      ),
+                      decoration: BoxDecoration(color: activeColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: activeColor)),
+                      child: SelectableText(tempPasswordResult!, style: TextStyle(color: activeColor, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 2)),
                     ),
                     const SizedBox(height: 24),
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () {
-                          Clipboard.setData(ClipboardData(text: tempPasswordResult!));
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("비밀번호가 복사되었습니다."), backgroundColor: activeColor));
-                        },
+                        onPressed: () { Clipboard.setData(ClipboardData(text: tempPasswordResult!)); Navigator.pop(context); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text("비밀번호가 복사되었습니다."), backgroundColor: activeColor)); },
                         style: ElevatedButton.styleFrom(backgroundColor: activeColor, foregroundColor: Colors.black),
                         child: const Text("복사하고 닫기", style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
                     )
                   ],
                 )
-                // [Step 1] 입력 화면 (기본 Cyan)
                     : Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text("Forgot Password?", style: GoogleFonts.chakraPetch(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    const Text("가입된 정보를 입력하면 임시 비밀번호를 발급합니다.", style: TextStyle(color: Colors.white54, fontSize: 13)),
                     const SizedBox(height: 24),
                     _buildDialogTextField("이메일", emailCtrl),
                     const SizedBox(height: 12),
@@ -193,50 +182,26 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       width: double.infinity,
                       height: 48,
                       child: ElevatedButton(
-                        onPressed: isDialogLoading
-                            ? null
-                            : () async {
+                        onPressed: isDialogLoading ? null : () async {
                           final email = emailCtrl.text.trim();
                           final name = nameCtrl.text.trim();
                           final phone = phoneCtrl.text.trim();
-
-                          if (email.isEmpty || name.isEmpty || phone.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("모든 정보를 입력해주세요.")));
-                            return;
-                          }
-
+                          if (email.isEmpty || name.isEmpty || phone.isEmpty) return;
                           setStateDialog(() => isDialogLoading = true);
-
-                          // Repository 호출 (Map 반환)
-                          final result = await SupabaseRepository().requestTemporaryPassword(
-                            email: email,
-                            name: name,
-                            phone: phone,
-                          );
-
+                          final result = await SupabaseRepository().requestTemporaryPassword(email: email, name: name, phone: phone);
                           setStateDialog(() {
                             isDialogLoading = false;
                             if (result != null) {
                               tempPasswordResult = result['password'];
-                              // Team ID로 색상 찾기
                               final teamId = result['team_id'] as int? ?? 1;
-                              teamColorResult = Department.values.firstWhere(
-                                      (d) => d.id == teamId,
-                                  orElse: () => Department.business
-                              ).color;
+                              teamColorResult = Department.values.firstWhere((d) => d.id == teamId, orElse: () => Department.business).color;
                             } else {
                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("일치하는 회원 정보가 없습니다.")));
                             }
                           });
                         },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: isDialogLoading
-                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
-                            : const Text("임시 비밀번호 발급", style: TextStyle(fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                        child: isDialogLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2)) : const Text("임시 비밀번호 발급", style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ],
@@ -260,9 +225,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           keyboardType: isNumber ? TextInputType.number : TextInputType.text,
           style: const TextStyle(color: Colors.white),
           decoration: InputDecoration(
-            isDense: true,
-            filled: true,
-            fillColor: Colors.black38,
+            isDense: true, filled: true, fillColor: Colors.black38,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           ),
@@ -290,7 +253,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const Icon(Icons.movie_filter, size: 60, color: Colors.white).animate().fadeIn().scale(),
                   const SizedBox(height: 10),
                   Text('KRAFT', style: GoogleFonts.chakraPetch(fontSize: 48, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 6)).animate().fadeIn().moveY(begin: -20, end: 0),
-                  Text('MEDIA & ENTERTAINMENT', style: GoogleFonts.inter(color: Colors.white70, letterSpacing: 2, fontSize: 12)).animate().fadeIn(delay: 200.ms),
                   const SizedBox(height: 50),
 
                   GlassContainer.clearGlass(
@@ -304,7 +266,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(_isLogin ? 'MEMBER LOGIN' : 'JOIN THE CREW', style: GoogleFonts.chakraPetch(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                        // [Feedback 9] 회원가입 시 뒤로가기 버튼 추가 (Row 사용)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (!_isLogin)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8.0),
+                                child: IconButton(
+                                  icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+                                  onPressed: () => setState(() => _isLogin = true),
+                                ),
+                              ),
+                            Text(_isLogin ? 'MEMBER LOGIN' : 'JOIN THE CREW', style: GoogleFonts.chakraPetch(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
                         const SizedBox(height: 30),
                         _buildTextField(_emailCtrl, 'Email', Icons.email_outlined, false),
                         const SizedBox(height: 16),
@@ -315,33 +291,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             alignment: Alignment.centerRight,
                             child: TextButton(
                               onPressed: _showForgotPasswordDialog,
-                              style: TextButton.styleFrom(
-                                padding: const EdgeInsets.only(top: 8, bottom: 8, left: 10),
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                              child: Text(
-                                "Forgot Password?",
-                                style: TextStyle(color: Colors.cyanAccent.withOpacity(0.7), fontSize: 12),
-                              ),
+                              style: TextButton.styleFrom(padding: const EdgeInsets.only(top: 8, bottom: 8, left: 10), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                              child: Text("Forgot Password?", style: TextStyle(color: Colors.cyanAccent.withOpacity(0.7), fontSize: 12)),
                             ),
                           ),
 
                         const SizedBox(height: 12),
-
                         if (_isLogin)
                           Row(
                             children: [
-                              SizedBox(
-                                width: 24, height: 24,
-                                child: Checkbox(
-                                  value: _keepLoggedIn,
-                                  activeColor: Colors.cyanAccent,
-                                  checkColor: Colors.black,
-                                  side: const BorderSide(color: Colors.white54),
-                                  onChanged: (val) => setState(() => _keepLoggedIn = val!),
-                                ),
-                              ),
+                              SizedBox(width: 24, height: 24, child: Checkbox(value: _keepLoggedIn, activeColor: Colors.cyanAccent, checkColor: Colors.black, side: const BorderSide(color: Colors.white54), onChanged: (val) => setState(() => _keepLoggedIn = val!))),
                               const SizedBox(width: 8),
                               const Text("Keep me logged in", style: TextStyle(color: Colors.white70)),
                             ],
@@ -357,10 +316,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                         ),
                         const SizedBox(height: 20),
-                        TextButton(
-                          onPressed: () => setState(() => _isLogin = !_isLogin),
-                          child: Text(_isLogin ? "New here? Sign Up" : "Have account? Login", style: const TextStyle(color: Colors.white70)),
-                        )
+                        if (_isLogin) // 로그인 상태일 때만 하단 링크 보이기 (회원가입시에는 뒤로가기로 처리)
+                          TextButton(
+                            onPressed: () => setState(() => _isLogin = !_isLogin),
+                            child: const Text("New here? Sign Up", style: TextStyle(color: Colors.white70)),
+                          )
                       ],
                     ),
                   ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.1, end: 0),
@@ -372,7 +332,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       ),
     );
   }
-
   Widget _buildTextField(TextEditingController ctrl, String hint, IconData icon, bool obscure) {
     return Container(
       decoration: BoxDecoration(color: Colors.black.withOpacity(0.3), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),

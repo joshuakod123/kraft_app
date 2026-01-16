@@ -24,7 +24,6 @@ class _SignupScreenState extends State<SignupScreen> {
 
   bool _isLoading = false;
 
-  // [수정 12] 에러/성공 팝업 함수
   void _showPopup(String title, String message, {bool isSuccess = false}) {
     showDialog(
       context: context,
@@ -47,22 +46,36 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 
   Future<void> _handleSignup() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    // 입력값 검증
+    if (email.isEmpty || password.isEmpty) {
+      _showPopup("오류", "이메일과 비밀번호를 입력해주세요.");
+      return;
+    }
+
     setState(() => _isLoading = true);
+
     try {
-      await SupabaseRepository().signUp(
-        _emailController.text.trim(),
-        _passwordController.text.trim(),
-        _nameController.text.trim(),
-        _selectedCohort,
-        _majorController.text.trim(),
-        _schoolController.text.trim(),
-        _studentIdController.text.trim(),
+      // [수정] Named Argument 사용하여 호출
+      final error = await SupabaseRepository().signUp(
+        email: email,
+        password: password,
       );
+
+      if (error != null) {
+        throw Exception(error);
+      }
+
       if (!mounted) return;
-      _showPopup("회원가입 성공", "회원가입이 완료되었습니다.\n로그인해주세요.", isSuccess: true);
+      _showPopup("회원가입 성공", "회원가입이 완료되었습니다.\n이메일 인증 후 로그인해주세요.", isSuccess: true);
+
     } on AuthException catch (e) {
+      if (!mounted) return;
       _showPopup("오류", e.message);
     } catch (e) {
+      if (!mounted) return;
       _showPopup("오류", "알 수 없는 오류가 발생했습니다: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -73,7 +86,6 @@ class _SignupScreenState extends State<SignupScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      // [수정 9] 뒤로가기 버튼을 위한 AppBar 추가
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,

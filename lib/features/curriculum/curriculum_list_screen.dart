@@ -52,11 +52,12 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
           .eq('user_id', myUserId ?? '')
           .order('start_time', ascending: true);
 
-      // 2. 공식 커리큘럼 가져오기 (curriculums 테이블)
-      // 팀 ID가 1번(전체)이거나 본인 팀인 경우 등 로직에 맞게 조정
+      // 2. [수정] 공식 커리큘럼 가져오기 (팀별 필터링 적용)
+      // Feedback 11: 공식 세션은 팀별로 보이도록 수정
       final curriculumsResponse = await _supabase
           .from('curriculums')
           .select()
+          .eq('team_id', myDept.id) // [수정] 내 팀의 일정만 조회
           .order('event_date', ascending: true);
 
       Map<DateTime, List<Map<String, dynamic>>> newEvents = {};
@@ -146,17 +147,19 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
     required DateTime date,
   }) async {
     try {
-      // Repository 함수 사용 (SQL 로직 분리)
+      // [수정] Feedback 11: 현재 임원의 팀 ID로 저장하도록 수정
+      final myDept = ref.read(currentDeptProvider);
+
       await _repository.addCurriculum(
         title: title,
         description: description,
         date: date,
         weekNumber: weekNumber,
-        teamId: 1, // 전체 공통이면 1, 팀별이면 currentDept.id 등 사용
+        teamId: myDept.id, // [수정] 1(전체) -> myDept.id (해당 팀)
       );
 
       await _fetchAllEvents();
-      if (mounted) _showPopup(context, "성공", "공식 세션이 등록되었습니다.\nQR 코드 목록에도 추가됩니다.", Colors.orangeAccent);
+      if (mounted) _showPopup(context, "성공", "공식 세션이 등록되었습니다.\n${myDept.name} 팀 캘린더에 추가됩니다.", Colors.orangeAccent);
     } catch (e) {
       if (mounted) _showPopup(context, "오류", "세션 등록 실패: $e", Colors.redAccent, isError: true);
     }
@@ -561,74 +564,81 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
-            return Padding(
-              padding: EdgeInsets.only(bottom: bottomPadding),
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                  child: Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E1E1E).withOpacity(0.9),
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-                      border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
-                        const SizedBox(height: 24),
-                        Text("새 일정 추가 (개인)", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                        const SizedBox(height: 20),
-                        _buildTextField(titleController, "제목", Icons.title, themeColor),
-                        const SizedBox(height: 16),
-                        _buildTextField(descController, "설명 (선택사항)", Icons.description_outlined, themeColor, maxLines: 2),
-                        const SizedBox(height: 20),
-                        Row(
-                          children: [
-                            Expanded(child: _buildTimePickerButton(context, "시작", startTime, themeColor, () async {
-                              final time = await showTimePicker(context: context, initialTime: startTime);
-                              if (time != null) setSheetState(() => startTime = time);
-                            })),
-                            const SizedBox(width: 12),
-                            Icon(Icons.arrow_forward_rounded, color: Colors.white.withOpacity(0.2)),
-                            const SizedBox(width: 12),
-                            Expanded(child: _buildTimePickerButton(context, "종료", endTime, themeColor, () async {
-                              final time = await showTimePicker(context: context, initialTime: endTime);
-                              if (time != null) setSheetState(() => endTime = time);
-                            })),
-                          ],
-                        ),
-                        const SizedBox(height: 30),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 56,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              if (titleController.text.isNotEmpty) {
-                                final startDateTime = DateTime(inputDate.year, inputDate.month, inputDate.day, startTime.hour, startTime.minute);
-                                final endDateTime = DateTime(inputDate.year, inputDate.month, inputDate.day, endTime.hour, endTime.minute);
-                                _addPersonalSchedule(title: titleController.text, description: descController.text, startTime: startDateTime, endTime: endDateTime);
-                                Navigator.pop(context);
-                              }
-                            },
-                            style: ElevatedButton.styleFrom(backgroundColor: themeColor, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 0),
-                            child: const Text("일정 생성", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        // [수정] Feedback 8: 키보드 내리기를 위한 GestureDetector 추가
+        return GestureDetector(
+          onTap: () => FocusScope.of(context).unfocus(),
+          behavior: HitTestBehavior.opaque,
+          child: StatefulBuilder(
+            builder: (context, setSheetState) {
+              final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
+              return Padding(
+                padding: EdgeInsets.only(bottom: bottomPadding),
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E1E1E).withOpacity(0.9),
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+                        border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+                          const SizedBox(height: 24),
+                          Text("새 일정 추가 (개인)", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                          const SizedBox(height: 20),
+                          _buildTextField(titleController, "제목", Icons.title, themeColor),
+                          const SizedBox(height: 16),
+                          _buildTextField(descController, "설명 (선택사항)", Icons.description_outlined, themeColor, maxLines: 2),
+                          const SizedBox(height: 20),
+                          Row(
+                            children: [
+                              Expanded(child: _buildTimePickerButton(context, "시작", startTime, themeColor, () async {
+                                final time = await showTimePicker(context: context, initialTime: startTime);
+                                if (time != null) setSheetState(() => startTime = time);
+                              })),
+                              const SizedBox(width: 12),
+                              Icon(Icons.arrow_forward_rounded, color: Colors.white.withOpacity(0.2)),
+                              const SizedBox(width: 12),
+                              Expanded(child: _buildTimePickerButton(context, "종료", endTime, themeColor, () async {
+                                final time = await showTimePicker(context: context, initialTime: endTime);
+                                if (time != null) setSheetState(() => endTime = time);
+                              })),
+                            ],
                           ),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
+                          const SizedBox(height: 30),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 56,
+                            child: ElevatedButton(
+                              onPressed: () {
+                                // [수정] 생성 버튼 클릭 시에도 포커스 해제
+                                FocusScope.of(context).unfocus();
+                                if (titleController.text.isNotEmpty) {
+                                  final startDateTime = DateTime(inputDate.year, inputDate.month, inputDate.day, startTime.hour, startTime.minute);
+                                  final endDateTime = DateTime(inputDate.year, inputDate.month, inputDate.day, endTime.hour, endTime.minute);
+                                  _addPersonalSchedule(title: titleController.text, description: descController.text, startTime: startDateTime, endTime: endDateTime);
+                                  Navigator.pop(context);
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(backgroundColor: themeColor, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 0),
+                              child: const Text("일정 생성", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         );
       },
     );
@@ -648,80 +658,87 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
-            return Padding(
-              padding: EdgeInsets.only(bottom: bottomPadding),
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                  child: Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E1E1E).withOpacity(0.9),
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-                      border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
-                        const SizedBox(height: 24),
-                        const Text("공식 세션 등록", style: TextStyle(color: officialColor, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                        const SizedBox(height: 4),
-                        const Text("이 세션은 QR 출석 목록에 자동으로 추가됩니다.", style: TextStyle(color: Colors.white54, fontSize: 12)),
-                        const SizedBox(height: 20),
+        // [수정] Feedback 8: 키보드 내리기를 위한 GestureDetector 추가
+        return GestureDetector(
+          onTap: () => FocusScope.of(context).unfocus(),
+          behavior: HitTestBehavior.opaque,
+          child: StatefulBuilder(
+            builder: (context, setSheetState) {
+              final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
+              return Padding(
+                padding: EdgeInsets.only(bottom: bottomPadding),
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E1E1E).withOpacity(0.9),
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+                        border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+                          const SizedBox(height: 24),
+                          const Text("공식 세션 등록", style: TextStyle(color: officialColor, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                          const SizedBox(height: 4),
+                          const Text("이 세션은 QR 출석 목록에 자동으로 추가됩니다.", style: TextStyle(color: Colors.white54, fontSize: 12)),
+                          const SizedBox(height: 20),
 
-                        _buildTextField(titleController, "세션 이름 (예: 1주차 세션)", Icons.school, officialColor),
-                        const SizedBox(height: 16),
-                        _buildTextField(weekController, "주차 (숫자만 입력)", Icons.calendar_today, officialColor),
-                        const SizedBox(height: 16),
-                        _buildTextField(descController, "설명 / 공지사항", Icons.description_outlined, officialColor, maxLines: 3),
+                          _buildTextField(titleController, "세션 이름 (예: 1주차 세션)", Icons.school, officialColor),
+                          const SizedBox(height: 16),
+                          _buildTextField(weekController, "주차 (숫자만 입력)", Icons.calendar_today, officialColor),
+                          const SizedBox(height: 16),
+                          _buildTextField(descController, "설명 / 공지사항", Icons.description_outlined, officialColor, maxLines: 3),
 
-                        const SizedBox(height: 20),
-                        Row(
-                          children: [
-                            const Icon(Icons.event_available, color: Colors.white70, size: 20),
-                            const SizedBox(width: 10),
-                            Text(
-                              "날짜: ${DateFormat('yyyy년 M월 d일 (E)', 'ko_KR').format(inputDate)}",
-                              style: const TextStyle(color: Colors.white, fontSize: 16),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 30),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 56,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              if (titleController.text.isNotEmpty && weekController.text.isNotEmpty) {
-                                final int week = int.tryParse(weekController.text) ?? 0;
-                                _addOfficialCurriculum(
-                                  title: titleController.text,
-                                  description: descController.text,
-                                  weekNumber: week,
-                                  date: inputDate,
-                                );
-                                Navigator.pop(context);
-                              }
-                            },
-                            style: ElevatedButton.styleFrom(backgroundColor: officialColor, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 0),
-                            child: const Text("공식 세션 생성", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 20),
+                          Row(
+                            children: [
+                              const Icon(Icons.event_available, color: Colors.white70, size: 20),
+                              const SizedBox(width: 10),
+                              Text(
+                                "날짜: ${DateFormat('yyyy년 M월 d일 (E)', 'ko_KR').format(inputDate)}",
+                                style: const TextStyle(color: Colors.white, fontSize: 16),
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
+
+                          const SizedBox(height: 30),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 56,
+                            child: ElevatedButton(
+                              onPressed: () {
+                                // [수정] 생성 버튼 클릭 시에도 포커스 해제
+                                FocusScope.of(context).unfocus();
+                                if (titleController.text.isNotEmpty && weekController.text.isNotEmpty) {
+                                  final int week = int.tryParse(weekController.text) ?? 0;
+                                  _addOfficialCurriculum(
+                                    title: titleController.text,
+                                    description: descController.text,
+                                    weekNumber: week,
+                                    date: inputDate,
+                                  );
+                                  Navigator.pop(context);
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(backgroundColor: officialColor, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 0),
+                              child: const Text("공식 세션 생성", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         );
       },
     );
