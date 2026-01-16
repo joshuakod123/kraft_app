@@ -180,7 +180,7 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> with Widget
             controller: _cameraController,
             scanWindow: scanWindow,
             onDetect: _handleBarcode,
-            // [수정 완료] 인자를 (context, error) 2개만 받도록 수정했습니다.
+            // [수정 완료] child 인자를 제거하여 (context, error) 2개만 받도록 수정
             errorBuilder: (context, error) {
               return Container(
                 color: Colors.black,

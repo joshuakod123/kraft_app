@@ -5,7 +5,6 @@ import 'package:just_audio_background/just_audio_background.dart';
 import 'package:path_provider/path_provider.dart';
 
 class SupabaseRepository {
-  // 클래스 내부에서 사용하는 Supabase 클라이언트 인스턴스 이름은 '_client'입니다.
   final SupabaseClient _client = Supabase.instance.client;
 
   User? get currentUser => _client.auth.currentUser;
@@ -148,12 +147,8 @@ class SupabaseRepository {
     }
   }
 
-  // ----------------------------------------------------------
-  // [계정 탈퇴 기능] (수정됨: _supabase -> _client)
-  // ----------------------------------------------------------
   Future<void> deleteAccount() async {
     try {
-      // Supabase SQL Editor에서 만든 'delete_account' 함수 호출
       await _client.rpc('delete_account');
     } catch (e) {
       throw Exception('계정 삭제 실패: $e');
@@ -161,7 +156,7 @@ class SupabaseRepository {
   }
 
   // ==========================================================
-  // [공식 일정] Curriculums
+  // [공식 일정] Curriculums (수정됨)
   // ==========================================================
 
   Stream<List<Map<String, dynamic>>> getCurriculumsStream(int teamId) {
@@ -195,11 +190,13 @@ class SupabaseRepository {
     }
   }
 
-  Future<List<String>> getSessionOptions() async {
+  // [수정 1] QR 생성용 세션 목록 조회 시 teamId 필터링 추가
+  Future<List<String>> getSessionOptions(int teamId) async {
     try {
       final response = await _client
           .from('curriculums')
           .select('title')
+          .eq('team_id', teamId) // [핵심] 내 팀의 커리큘럼만 가져옴
           .order('event_date', ascending: false)
           .limit(20);
 
@@ -288,7 +285,7 @@ class SupabaseRepository {
   }
 
   // ==========================================================
-  // [Archives] 로컬 저장 + 삭제 기능
+  // [Archives]
   // ==========================================================
 
   Future<List<Map<String, dynamic>>> fetchMyArchives() async {
@@ -355,7 +352,7 @@ class SupabaseRepository {
   }
 
   // ==========================================================
-  // [Music Social Features] 핵심 수정 부분
+  // [Music Social Features]
   // ==========================================================
 
   Future<void> addComment(int songId, String content) async {
@@ -386,23 +383,14 @@ class SupabaseRepository {
     await _client.from('comments').delete().eq('id', commentId);
   }
 
-  // [중요 수정] 디버깅 로그 강화 및 URL 생성 로직 안정화
   Future<List<MediaItem>> fetchSongs() async {
     try {
-      print('🎵 [Supabase] 노래 목록 Fetch 시작...');
-
-      // 1. Supabase 'songs' 테이블 쿼리
       final List<dynamic> response = await _client
           .from('songs')
           .select('*')
           .order('created_at', ascending: false);
 
-      print('🎵 [Supabase] 서버에서 응답 받음: ${response.length}개의 데이터');
-
-      if (response.isEmpty) {
-        print('⚠️ [Supabase] 데이터가 0개입니다. (테이블이 비어있거나, Row Level Security 정책 문제일 수 있음)');
-        return [];
-      }
+      if (response.isEmpty) return [];
 
       final songs = response.map((song) {
         final String rawPath = song['file_path'] ?? '';
@@ -418,23 +406,19 @@ class SupabaseRepository {
           coverUrl = _client.storage.from('songs').getPublicUrl(rawCover);
         }
 
-        print('▶️ [Song] 제목: ${song['title']} | URL: $audioUrl');
-
         return MediaItem(
           id: song['id'].toString(),
           album: "Kraft Music",
           title: song['title'] ?? '제목 없음',
           artist: song['artist'] ?? '아티스트 미상',
           artUri: coverUrl.isNotEmpty ? Uri.tryParse(coverUrl) : null,
-          extras: {'url': audioUrl}, // 여기서 변환된 전체 URL을 넘깁니다.
+          extras: {'url': audioUrl},
         );
       }).toList();
 
       return songs;
 
     } catch (e) {
-      print("❌ [Supabase Error] 노래 목록 가져오기 대실패: $e");
-      // 에러가 나면 빈 리스트를 반환하여 앱이 죽지 않게 함
       return [];
     }
   }

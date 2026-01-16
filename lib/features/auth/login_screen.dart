@@ -18,10 +18,13 @@ class LoginScreen extends ConsumerStatefulWidget {
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailCtrl = TextEditingController();
   final _pwCtrl = TextEditingController();
+
+  // true: 로그인 모드, false: 회원가입 모드
   bool _isLogin = true;
   bool _isLoading = false;
   bool _keepLoggedIn = true;
 
+  // [Feedback 12] 에러 팝업 (SnackBar 대신 Dialog 사용)
   void _showErrorDialog(String message) {
     showDialog(
       context: context,
@@ -32,7 +35,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           children: [
             const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 28),
             const SizedBox(width: 12),
-            Text("로그인 실패", style: GoogleFonts.chakraPetch(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+            Text("오류", style: GoogleFonts.chakraPetch(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
           ],
         ),
         content: Text(message, style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.5)),
@@ -97,9 +100,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       } else {
         await ref.read(authProvider.notifier).signUp(email, password);
         if (mounted) {
-          // [Feedback 12] 팝업으로 변경
           _showSuccessDialog('가입 성공! 로그인해주세요.');
-          setState(() => _isLogin = true);
+          setState(() => _isLogin = true); // 가입 성공 시 로그인 화면으로 전환
         }
       }
     } catch (e) {
@@ -120,8 +122,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
-  // 비밀번호 찾기 다이얼로그 (이전 코드 유지)
   void _showForgotPasswordDialog() {
+    // (기존 코드 유지 - 너무 길어서 생략하지만, 필요하다면 그대로 두시면 됩니다)
+    // ... 기존과 동일 ...
     final emailCtrl = TextEditingController();
     final nameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
@@ -196,6 +199,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               final teamId = result['team_id'] as int? ?? 1;
                               teamColorResult = Department.values.firstWhere((d) => d.id == teamId, orElse: () => Department.business).color;
                             } else {
+                              // 여기는 Dialog 내부라 SnackBar 사용해도 무방하지만 일관성을 위해 텍스트 표시 등으로 바꿀 수 있음
                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("일치하는 회원 정보가 없습니다.")));
                             }
                           });
@@ -236,102 +240,121 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          Positioned(top: -100, left: -50, child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.purpleAccent.withOpacity(0.4), boxShadow: [const BoxShadow(blurRadius: 150, color: Colors.purpleAccent)])))
-              .animate(onPlay: (c) => c.repeat(reverse: true)).scale(duration: 4.seconds, begin: const Offset(1, 1), end: const Offset(1.2, 1.2)),
-          Positioned(bottom: -50, right: -50, child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.cyanAccent.withOpacity(0.3), boxShadow: [const BoxShadow(blurRadius: 150, color: Colors.cyanAccent)])))
-              .animate(onPlay: (c) => c.repeat(reverse: true)).moveY(duration: 5.seconds, begin: 0, end: 50),
+    // [Feedback 9] 안드로이드 물리 뒤로가기 버튼 처리
+    return PopScope(
+      canPop: _isLogin, // 로그인 모드일 때만 앱 종료 가능
+      onPopInvoked: (didPop) {
+        if (!didPop && !_isLogin) {
+          // 회원가입 모드에서 뒤로가기 누르면 로그인 모드로 전환
+          setState(() => _isLogin = true);
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
+          children: [
+            Positioned(top: -100, left: -50, child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.purpleAccent.withOpacity(0.4), boxShadow: [const BoxShadow(blurRadius: 150, color: Colors.purpleAccent)])))
+                .animate(onPlay: (c) => c.repeat(reverse: true)).scale(duration: 4.seconds, begin: const Offset(1, 1), end: const Offset(1.2, 1.2)),
+            Positioned(bottom: -50, right: -50, child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.cyanAccent.withOpacity(0.3), boxShadow: [const BoxShadow(blurRadius: 150, color: Colors.cyanAccent)])))
+                .animate(onPlay: (c) => c.repeat(reverse: true)).moveY(duration: 5.seconds, begin: 0, end: 50),
 
-          Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  const Icon(Icons.movie_filter, size: 60, color: Colors.white).animate().fadeIn().scale(),
-                  const SizedBox(height: 10),
-                  Text('KRAFT', style: GoogleFonts.chakraPetch(fontSize: 48, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 6)).animate().fadeIn().moveY(begin: -20, end: 0),
-                  const SizedBox(height: 50),
+            Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    const Icon(Icons.movie_filter, size: 60, color: Colors.white).animate().fadeIn().scale(),
+                    const SizedBox(height: 10),
+                    Text('KRAFT', style: GoogleFonts.chakraPetch(fontSize: 48, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 6)).animate().fadeIn().moveY(begin: -20, end: 0),
+                    const SizedBox(height: 50),
 
-                  GlassContainer.clearGlass(
-                    height: 540,
-                    width: double.infinity,
-                    borderRadius: BorderRadius.circular(24),
-                    borderWidth: 1.5,
-                    borderColor: Colors.white.withOpacity(0.2),
-                    elevation: 20,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // [Feedback 9] 회원가입 시 뒤로가기 버튼 추가 (Row 사용)
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            if (!_isLogin)
-                              Padding(
-                                padding: const EdgeInsets.only(right: 8.0),
-                                child: IconButton(
-                                  icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
-                                  onPressed: () => setState(() => _isLogin = true),
+                    GlassContainer.clearGlass(
+                      height: 560, // 높이 약간 증가
+                      width: double.infinity,
+                      borderRadius: BorderRadius.circular(24),
+                      borderWidth: 1.5,
+                      borderColor: Colors.white.withOpacity(0.2),
+                      elevation: 20,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // [Feedback 9] 상단 뒤로가기 아이콘 (회원가입 시 표시)
+                              if (!_isLogin)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 8.0),
+                                  child: IconButton(
+                                    icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+                                    onPressed: () => setState(() => _isLogin = true),
+                                  ),
                                 ),
-                              ),
-                            Text(_isLogin ? 'MEMBER LOGIN' : 'JOIN THE CREW', style: GoogleFonts.chakraPetch(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                        const SizedBox(height: 30),
-                        _buildTextField(_emailCtrl, 'Email', Icons.email_outlined, false),
-                        const SizedBox(height: 16),
-                        _buildTextField(_pwCtrl, 'Password', Icons.lock_outline, true),
+                              Text(_isLogin ? 'MEMBER LOGIN' : 'JOIN THE CREW', style: GoogleFonts.chakraPetch(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                          const SizedBox(height: 30),
+                          _buildTextField(_emailCtrl, 'Email', Icons.email_outlined, false),
+                          const SizedBox(height: 16),
+                          _buildTextField(_pwCtrl, 'Password', Icons.lock_outline, true),
 
-                        if (_isLogin)
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton(
-                              onPressed: _showForgotPasswordDialog,
-                              style: TextButton.styleFrom(padding: const EdgeInsets.only(top: 8, bottom: 8, left: 10), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                              child: Text("Forgot Password?", style: TextStyle(color: Colors.cyanAccent.withOpacity(0.7), fontSize: 12)),
+                          if (_isLogin)
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: _showForgotPasswordDialog,
+                                style: TextButton.styleFrom(padding: const EdgeInsets.only(top: 8, bottom: 8, left: 10), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                                child: Text("Forgot Password?", style: TextStyle(color: Colors.cyanAccent.withOpacity(0.7), fontSize: 12)),
+                              ),
+                            ),
+
+                          const SizedBox(height: 12),
+                          if (_isLogin)
+                            Row(
+                              children: [
+                                SizedBox(width: 24, height: 24, child: Checkbox(value: _keepLoggedIn, activeColor: Colors.cyanAccent, checkColor: Colors.black, side: const BorderSide(color: Colors.white54), onChanged: (val) => setState(() => _keepLoggedIn = val!))),
+                                const SizedBox(width: 8),
+                                const Text("Keep me logged in", style: TextStyle(color: Colors.white70)),
+                              ],
+                            ).animate().fadeIn(),
+
+                          const SizedBox(height: 30),
+                          SizedBox(
+                            width: double.infinity, height: 52,
+                            child: ElevatedButton(
+                              onPressed: _isLoading ? null : _submit,
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                              child: _isLoading ? const CircularProgressIndicator(color: Colors.black) : Text(_isLogin ? 'ENTER' : 'SIGN UP', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                             ),
                           ),
+                          const SizedBox(height: 20),
 
-                        const SizedBox(height: 12),
-                        if (_isLogin)
-                          Row(
-                            children: [
-                              SizedBox(width: 24, height: 24, child: Checkbox(value: _keepLoggedIn, activeColor: Colors.cyanAccent, checkColor: Colors.black, side: const BorderSide(color: Colors.white54), onChanged: (val) => setState(() => _keepLoggedIn = val!))),
-                              const SizedBox(width: 8),
-                              const Text("Keep me logged in", style: TextStyle(color: Colors.white70)),
-                            ],
-                          ).animate().fadeIn(),
-
-                        const SizedBox(height: 30),
-                        SizedBox(
-                          width: double.infinity, height: 52,
-                          child: ElevatedButton(
-                            onPressed: _isLoading ? null : _submit,
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                            child: _isLoading ? const CircularProgressIndicator(color: Colors.black) : Text(_isLogin ? 'ENTER' : 'SIGN UP', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        if (_isLogin) // 로그인 상태일 때만 하단 링크 보이기 (회원가입시에는 뒤로가기로 처리)
-                          TextButton(
-                            onPressed: () => setState(() => _isLogin = !_isLogin),
-                            child: const Text("New here? Sign Up", style: TextStyle(color: Colors.white70)),
-                          )
-                      ],
-                    ),
-                  ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.1, end: 0),
-                ],
+                          // [Feedback 9] 하단 전환 버튼
+                          if (_isLogin)
+                            TextButton(
+                              onPressed: () => setState(() => _isLogin = !_isLogin),
+                              child: const Text("New here? Sign Up", style: TextStyle(color: Colors.white70)),
+                            )
+                          else
+                          // 회원가입 모드일 때 "로그인으로 돌아가기" 버튼 명시
+                            TextButton(
+                              onPressed: () => setState(() => _isLogin = true),
+                              child: const Text("Already a member? Log in", style: TextStyle(color: Colors.white70)),
+                            )
+                        ],
+                      ),
+                    ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.1, end: 0),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
+
   Widget _buildTextField(TextEditingController ctrl, String hint, IconData icon, bool obscure) {
     return Container(
       decoration: BoxDecoration(color: Colors.black.withOpacity(0.3), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),

@@ -19,11 +19,10 @@ class _SignupScreenState extends State<SignupScreen> {
   final _majorController = TextEditingController();
   final _schoolController = TextEditingController();
 
-  // 기수 선택 (Dropdown)
   int _selectedCohort = 1;
-
   bool _isLoading = false;
 
+  // [Feedback 12] 팝업 알림 함수
   void _showPopup(String title, String message, {bool isSuccess = false}) {
     showDialog(
       context: context,
@@ -36,7 +35,14 @@ class _SignupScreenState extends State<SignupScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              if (isSuccess) context.go('/login'); // 성공 시 로그인 화면으로
+              if (isSuccess) {
+                // 로그인 화면으로 이동 (스택에 있으면 pop, 아니면 go)
+                if (context.canPop()) {
+                  context.pop();
+                } else {
+                  context.go('/login');
+                }
+              }
             },
             child: const Text('확인', style: TextStyle(color: Colors.white)),
           ),
@@ -49,7 +55,6 @@ class _SignupScreenState extends State<SignupScreen> {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    // 입력값 검증
     if (email.isEmpty || password.isEmpty) {
       _showPopup("오류", "이메일과 비밀번호를 입력해주세요.");
       return;
@@ -58,7 +63,7 @@ class _SignupScreenState extends State<SignupScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // [수정] Named Argument 사용하여 호출
+      // [에러 해결] Named Parameter 사용 (email: , password: )
       final error = await SupabaseRepository().signUp(
         email: email,
         password: password,
@@ -89,6 +94,7 @@ class _SignupScreenState extends State<SignupScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        // [Feedback 9] 뒤로가기 버튼
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
           onPressed: () => context.canPop() ? context.pop() : context.go('/login'),
@@ -110,7 +116,6 @@ class _SignupScreenState extends State<SignupScreen> {
               _buildTextField("이름", _nameController),
               const SizedBox(height: 16),
 
-              // 기수 선택 드롭다운
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(12)),
