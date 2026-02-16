@@ -8,7 +8,7 @@ import 'package:intl/intl.dart';
 // [Provider 및 Enum 연결]
 import '../../core/constants/department_enum.dart';
 import '../../core/state/global_providers.dart';
-import '../../core/data/supabase_repository.dart'; // Repository 추가
+import '../../core/data/supabase_repository.dart';
 
 class CurriculumListScreen extends ConsumerStatefulWidget {
   const CurriculumListScreen({super.key});
@@ -19,7 +19,7 @@ class CurriculumListScreen extends ConsumerStatefulWidget {
 
 class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
   final _supabase = Supabase.instance.client;
-  final SupabaseRepository _repository = SupabaseRepository(); // Repository 인스턴스
+  final SupabaseRepository _repository = SupabaseRepository();
 
   CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
@@ -33,7 +33,7 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
     super.initState();
     _selectedDay = _focusedDay;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _fetchAllEvents(); // 이름 변경: fetchSchedules -> fetchAllEvents
+      _fetchAllEvents();
     });
   }
 
@@ -45,19 +45,18 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
       final myDept = ref.read(currentDeptProvider);
       final myUserId = _supabase.auth.currentUser?.id;
 
-      // 1. 개인 일정 가져오기 (schedules 테이블)
+      // 1. 개인 일정 가져오기
       final schedulesResponse = await _supabase
-          .from('schedules') // SQL 테이블명 확인 (personal_schedules or schedules)
+          .from('schedules')
           .select()
           .eq('user_id', myUserId ?? '')
           .order('start_time', ascending: true);
 
-      // 2. [수정] 공식 커리큘럼 가져오기 (팀별 필터링 적용)
-      // Feedback 11: 공식 세션은 팀별로 보이도록 수정
+      // 2. 공식 커리큘럼 가져오기 (팀별 필터링 적용)
       final curriculumsResponse = await _supabase
           .from('curriculums')
           .select()
-          .eq('team_id', myDept.id) // [수정] 내 팀의 일정만 조회
+          .eq('team_id', myDept.id)
           .order('event_date', ascending: true);
 
       Map<DateTime, List<Map<String, dynamic>>> newEvents = {};
@@ -71,7 +70,6 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
 
         if (newEvents[dateKey] == null) newEvents[dateKey] = [];
 
-        // UI에 맞게 데이터 가공
         newEvents[dateKey]!.add({
           ...item,
           'type': 'personal',
@@ -90,10 +88,10 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
           'id': item['id'],
           'title': item['title'],
           'description': item['description'],
-          'start_time': item['event_date'], // UI 호환성을 위해 키 매핑
+          'start_time': item['event_date'],
           'end_time': item['end_time'] ?? item['event_date'],
           'type': 'official',
-          'is_official': true, // 공식 일정 플래그
+          'is_official': true,
           'week_number': item['week_number'],
         });
       }
@@ -109,7 +107,6 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
   }
 
   List<Map<String, dynamic>> _getEventsForDay(DateTime day) {
-    // UTC로 변환하여 Key 조회 (시간 오차 방지)
     return _events[DateTime.utc(day.year, day.month, day.day)] ?? [];
   }
 
@@ -122,15 +119,7 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
   }) async {
     final myDept = ref.read(currentDeptProvider);
     try {
-      await _supabase.from('schedules').insert({
-        'title': title,
-        'description': description,
-        'start_time': startTime.toIso8601String(),
-        'end_time': endTime.toIso8601String(),
-        'is_official': false,
-        'department': myDept.name,
-        'user_id': _supabase.auth.currentUser?.id,
-      });
+      await _repository.addPersonalSchedule(title, description, startTime, endTime);
 
       await _fetchAllEvents();
       if (mounted) _showPopup(context, "성공", "개인 일정이 추가되었습니다!", myDept.color);
@@ -139,23 +128,24 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
     }
   }
 
-  // 공식 커리큘럼 추가 (임원용)
+  // [수정] 공식 커리큘럼 추가 (시간 포함)
   Future<void> _addOfficialCurriculum({
     required String title,
     required String description,
     required int weekNumber,
-    required DateTime date,
+    required DateTime startTime,
+    required DateTime endTime,
   }) async {
     try {
-      // [수정] Feedback 11: 현재 임원의 팀 ID로 저장하도록 수정
       final myDept = ref.read(currentDeptProvider);
 
       await _repository.addCurriculum(
         title: title,
         description: description,
-        date: date,
         weekNumber: weekNumber,
-        teamId: myDept.id, // [수정] 1(전체) -> myDept.id (해당 팀)
+        startTime: startTime, // 시작 시간
+        endTime: endTime,     // 종료 시간
+        teamId: myDept.id,
       );
 
       await _fetchAllEvents();
@@ -175,7 +165,7 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
       if (isOfficial) {
         await _supabase.from('curriculums').delete().eq('id', id);
       } else {
-        await _supabase.from('schedules').delete().eq('id', id);
+        await _supabase.from('schedules').delete().eq('id', id); // schedules or personal_schedules
       }
 
       await _fetchAllEvents();
@@ -186,7 +176,7 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
   }
 
   // --------------------------------------------------------
-  // 2. UI 빌드 (기존 디자인 유지)
+  // 2. UI 빌드
   // --------------------------------------------------------
   @override
   Widget build(BuildContext context) {
@@ -328,7 +318,7 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                     final event = dailyEvents[index];
                     final bool isOfficial = event['is_official'] ?? false;
                     final int id = event['id'];
-                    final bool canDelete = isManager || !isOfficial; // 임원만 공식 삭제 가능, 내 개인일정은 삭제 가능
+                    final bool canDelete = isManager || !isOfficial;
 
                     final bool isFirst = index == 0;
                     final bool isLast = index == dailyEvents.length - 1;
@@ -432,7 +422,6 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                                           ],
                                         ),
                                         const SizedBox(height: 6),
-                                        // 시간 표시 (공식 일정은 시간 정보가 없을 수도 있음)
                                         if (event['start_time'] != null)
                                           Row(
                                             children: [
@@ -471,7 +460,6 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
           ),
         ),
       ),
-      // [수정] FAB 클릭 시 핸들러 변경
       floatingActionButton: FloatingActionButton(
         onPressed: () => _handleFabClick(context, themeColor, isManager),
         backgroundColor: themeColor,
@@ -484,19 +472,15 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
     if (start == null) return '';
     final s = DateTime.parse(start).toLocal();
     final e = end != null ? DateTime.parse(end).toLocal() : s;
-
-    // 시간이 00:00이면 날짜만 표시하거나 생략하는 로직 등 커스텀 가능
     return "${DateFormat('HH:mm').format(s)} - ${DateFormat('HH:mm').format(e)}";
   }
 
   // --------------------------------------------------------
-  // 3. 팝업 & 다이얼로그 (로직 추가됨)
+  // 3. 팝업 & 다이얼로그
   // --------------------------------------------------------
 
-  // [NEW] FAB 클릭 시 분기 처리
   void _handleFabClick(BuildContext context, Color themeColor, bool isManager) {
     if (isManager) {
-      // 임원은 선택지 보여주기
       showModalBottomSheet(
         context: context,
         backgroundColor: Colors.transparent,
@@ -544,12 +528,11 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
         ),
       );
     } else {
-      // 일반 부원은 바로 개인 일정 추가
       _showAddPersonalScheduleSheet(context, themeColor);
     }
   }
 
-  // [개인 일정 추가 시트]
+  // [개인 일정 추가 시트] - 기존과 동일, 생략 없이 포함
   void _showAddPersonalScheduleSheet(BuildContext context, Color themeColor) {
     DateTime now = DateTime.now();
     DateTime inputDate = _selectedDay ?? now;
@@ -564,7 +547,6 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        // [수정] Feedback 8: 키보드 내리기를 위한 GestureDetector 추가
         return GestureDetector(
           onTap: () => FocusScope.of(context).unfocus(),
           behavior: HitTestBehavior.opaque,
@@ -617,7 +599,6 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                             height: 56,
                             child: ElevatedButton(
                               onPressed: () {
-                                // [수정] 생성 버튼 클릭 시에도 포커스 해제
                                 FocusScope.of(context).unfocus();
                                 if (titleController.text.isNotEmpty) {
                                   final startDateTime = DateTime(inputDate.year, inputDate.month, inputDate.day, startTime.hour, startTime.minute);
@@ -644,12 +625,16 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
     );
   }
 
-  // [공식 커리큘럼 추가 시트]
+  // [수정] 공식 커리큘럼 추가 시트 (시간 선택 추가)
   void _showAddOfficialCurriculumSheet(BuildContext context) {
     final DateTime inputDate = _selectedDay ?? DateTime.now();
-    final titleController = TextEditingController(); // 예: 1주차 세션
-    final weekController = TextEditingController(); // 예: 1
+    final titleController = TextEditingController();
+    final weekController = TextEditingController();
     final descController = TextEditingController();
+
+    // 기본 시간 설정 (오후 6시 ~ 8시)
+    TimeOfDay startTime = const TimeOfDay(hour: 18, minute: 0);
+    TimeOfDay endTime = const TimeOfDay(hour: 20, minute: 0);
 
     const Color officialColor = Colors.orangeAccent;
 
@@ -658,7 +643,6 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        // [수정] Feedback 8: 키보드 내리기를 위한 GestureDetector 추가
         return GestureDetector(
           onTap: () => FocusScope.of(context).unfocus(),
           behavior: HitTestBehavior.opaque,
@@ -696,6 +680,23 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                           _buildTextField(descController, "설명 / 공지사항", Icons.description_outlined, officialColor, maxLines: 3),
 
                           const SizedBox(height: 20),
+                          // [추가] 시간 선택 UI
+                          Row(
+                            children: [
+                              Expanded(child: _buildTimePickerButton(context, "시작 시간", startTime, officialColor, () async {
+                                final time = await showTimePicker(context: context, initialTime: startTime);
+                                if (time != null) setSheetState(() => startTime = time);
+                              })),
+                              const SizedBox(width: 12),
+                              Icon(Icons.arrow_forward_rounded, color: Colors.white.withOpacity(0.2)),
+                              const SizedBox(width: 12),
+                              Expanded(child: _buildTimePickerButton(context, "종료 시간", endTime, officialColor, () async {
+                                final time = await showTimePicker(context: context, initialTime: endTime);
+                                if (time != null) setSheetState(() => endTime = time);
+                              })),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
                           Row(
                             children: [
                               const Icon(Icons.event_available, color: Colors.white70, size: 20),
@@ -713,15 +714,20 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                             height: 56,
                             child: ElevatedButton(
                               onPressed: () {
-                                // [수정] 생성 버튼 클릭 시에도 포커스 해제
                                 FocusScope.of(context).unfocus();
                                 if (titleController.text.isNotEmpty && weekController.text.isNotEmpty) {
                                   final int week = int.tryParse(weekController.text) ?? 0;
+
+                                  // 시간 데이터 병합
+                                  final startDateTime = DateTime(inputDate.year, inputDate.month, inputDate.day, startTime.hour, startTime.minute);
+                                  final endDateTime = DateTime(inputDate.year, inputDate.month, inputDate.day, endTime.hour, endTime.minute);
+
                                   _addOfficialCurriculum(
                                     title: titleController.text,
                                     description: descController.text,
                                     weekNumber: week,
-                                    date: inputDate,
+                                    startTime: startDateTime, // 전달
+                                    endTime: endDateTime,     // 전달
                                   );
                                   Navigator.pop(context);
                                 }
@@ -744,7 +750,6 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
     );
   }
 
-  // 팝업 알림 (Glass Effect)
   void _showPopup(BuildContext context, String title, String message, Color themeColor, {bool isError = false}) {
     showDialog(
       context: context,
@@ -791,7 +796,6 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
     );
   }
 
-  // 삭제 확인 팝업
   void _showDeleteConfirmDialog(BuildContext context, int id, bool isOfficial, bool isManager) {
     showDialog(
       context: context,
@@ -842,7 +846,6 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
     );
   }
 
-  // 상세 보기 팝업
   void _showDetailDialog(BuildContext context, Map<String, dynamic> event, Color themeColor, bool isManager, bool canDelete) {
     final bool isOfficial = event['is_official'] ?? false;
     final int id = event['id'];

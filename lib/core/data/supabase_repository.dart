@@ -167,10 +167,12 @@ class SupabaseRepository {
         .order('event_date', ascending: true);
   }
 
+  // [수정] 시작 시간(event_date)과 종료 시간(end_time)을 정확히 받도록 변경
   Future<bool> addCurriculum({
     required String title,
     required String description,
-    required DateTime date,
+    required DateTime startTime,
+    required DateTime endTime,
     required int weekNumber,
     int? teamId,
   }) async {
@@ -180,7 +182,8 @@ class SupabaseRepository {
         'description': description,
         'week_number': weekNumber,
         'team_id': teamId ?? 1,
-        'event_date': date.toIso8601String(),
+        'event_date': startTime.toIso8601String(), // 시작 시간
+        'end_time': endTime.toIso8601String(),     // 종료 시간
         'semester_id': 1,
       });
       return true;
@@ -190,13 +193,12 @@ class SupabaseRepository {
     }
   }
 
-  // [수정 1] QR 생성용 세션 목록 조회 시 teamId 필터링 추가
   Future<List<String>> getSessionOptions(int teamId) async {
     try {
       final response = await _client
           .from('curriculums')
           .select('title')
-          .eq('team_id', teamId) // [핵심] 내 팀의 커리큘럼만 가져옴
+          .eq('team_id', teamId)
           .order('event_date', ascending: false)
           .limit(20);
 
@@ -240,11 +242,13 @@ class SupabaseRepository {
         'user_id': userId,
         'title': title,
         'description': desc,
-        'event_date': date.toIso8601String(),
+        'start_time': date.toIso8601String(),
         'end_time': endTime?.toIso8601String(),
+        'event_date': date.toIso8601String(), // 호환성 유지
       });
       return true;
     } catch (e) {
+      debugPrint("Add Personal Schedule Error: $e");
       return false;
     }
   }
