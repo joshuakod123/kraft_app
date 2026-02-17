@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class MagazineUploadScreen extends ConsumerStatefulWidget {
   const MagazineUploadScreen({super.key});
@@ -43,12 +42,17 @@ class _MagazineUploadScreenState extends ConsumerState<MagazineUploadScreen> {
 
     try {
       final supabase = Supabase.instance.client;
-      final userId = supabase.auth.currentUser!.id;
+      final user = supabase.auth.currentUser;
 
-      // 1. 이미지 업로드 (Storage bucket 이름: magazines 가 존재해야 함)
+      if (user == null) throw "로그인이 필요합니다.";
+
+      // 1. 이미지 업로드
       final fileExt = _selectedImage!.path.split('.').last;
-      final fileName = '${DateTime.now().toIso8601String()}.$fileExt';
-      final filePath = '$userId/$fileName';
+
+      // [FIX] toMillisecondsSinceEpoch -> millisecondsSinceEpoch 로 수정!
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}.$fileExt';
+
+      final filePath = '${user.id}/$fileName';
 
       await supabase.storage.from('magazines').upload(filePath, _selectedImage!);
       final imageUrl = supabase.storage.from('magazines').getPublicUrl(filePath);
@@ -59,12 +63,13 @@ class _MagazineUploadScreenState extends ConsumerState<MagazineUploadScreen> {
         'subtitle': _subtitleController.text,
         'content': _contentController.text,
         'cover_image_url': imageUrl,
-        'author_id': userId,
+        'author_id': user.id,
+        'author_name': user.userMetadata?['name'] ?? 'Unknown',
         'created_at': DateTime.now().toIso8601String(),
       });
 
       if (mounted) {
-        context.pop(); // 업로드 성공 후 뒤로가기
+        context.pop();
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('매거진 발행 성공!')));
       }
     } catch (e) {
@@ -87,7 +92,6 @@ class _MagazineUploadScreenState extends ConsumerState<MagazineUploadScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 커버 이미지 선택
               GestureDetector(
                 onTap: _pickImage,
                 child: Container(
@@ -111,26 +115,20 @@ class _MagazineUploadScreenState extends ConsumerState<MagazineUploadScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-
-              // 제목 입력
               TextFormField(
                 controller: _titleController,
                 decoration: const InputDecoration(labelText: '제목', border: OutlineInputBorder()),
                 validator: (value) => value!.isEmpty ? '제목을 입력하세요' : null,
               ),
               const SizedBox(height: 16),
-
-              // 부제목 입력
               TextFormField(
                 controller: _subtitleController,
                 decoration: const InputDecoration(labelText: '부제목 (한 줄 요약)', border: OutlineInputBorder()),
               ),
               const SizedBox(height: 16),
-
-              // 본문 입력 (Markdown)
               TextFormField(
                 controller: _contentController,
-                maxLines: 10,
+                maxLines: 15,
                 decoration: const InputDecoration(
                   labelText: '본문 (Markdown 지원)',
                   border: OutlineInputBorder(),
@@ -139,8 +137,6 @@ class _MagazineUploadScreenState extends ConsumerState<MagazineUploadScreen> {
                 validator: (value) => value!.isEmpty ? '내용을 입력하세요' : null,
               ),
               const SizedBox(height: 24),
-
-              // 업로드 버튼
               ElevatedButton(
                 onPressed: _isLoading ? null : _uploadMagazine,
                 style: ElevatedButton.styleFrom(
