@@ -9,7 +9,7 @@ import '../../features/auth/onboarding_screen.dart';
 import '../../features/home/home_screen.dart';
 import '../../features/curriculum/curriculum_list_screen.dart';
 import '../../features/curriculum/assignment_upload_screen.dart';
-import '../../features/streaming/stream_list_screen.dart'; // [수정] 목록 화면 import
+import '../../features/streaming/stream_list_screen.dart';
 import '../../features/streaming/stream_screen.dart';
 import '../../features/splash/splash_screen.dart';
 import '../../features/admin/qr_create_screen.dart';
@@ -18,6 +18,12 @@ import '../../features/attendance/attendance_list_screen.dart';
 import '../../features/archive/archive_screen.dart';
 import '../../features/profile/profile_screen.dart';
 import '../../features/home/team_member_screen.dart';
+
+// [NEW] 매거진 관련 스크린 import
+import '../../features/magazine/magazine_list_screen.dart';
+import '../../features/magazine/magazine_detail_screen.dart';
+import '../../features/magazine/magazine_upload_screen.dart';
+import '../../features/magazine/magazine_model.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authStateListenable = ValueNotifier<AuthStatus>(AuthStatus.initial);
@@ -43,10 +49,22 @@ final routerProvider = Provider<GoRouter>((ref) {
       // [임원진 기능]
       GoRoute(path: '/qr_create', builder: (_, __) => const QrCreateScreen()),
       GoRoute(path: '/attendance_list', builder: (_, __) => const AttendanceListScreen()),
-
       GoRoute(path: '/attendance_scan', builder: (_, __) => const AttendanceScanScreen()),
+
+      // [일반 기능]
       GoRoute(path: '/archive', builder: (_, __) => const ArchiveScreen()),
       GoRoute(path: '/assignment_upload', builder: (_, state) => AssignmentUploadScreen(item: state.extra as dynamic)),
+
+      // [NEW] 매거진 관련 라우트 추가
+      GoRoute(path: '/magazine_list', builder: (_, __) => const MagazineListScreen()),
+      GoRoute(path: '/magazine_upload', builder: (_, __) => const MagazineUploadScreen()),
+      GoRoute(
+          path: '/magazine_detail',
+          builder: (context, state) {
+            final magazine = state.extra as Magazine; // 객체 전달받음
+            return MagazineDetailScreen(magazine: magazine);
+          }
+      ),
 
       ShellRoute(
         builder: (context, state, child) => MainShell(child: child),
@@ -54,10 +72,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/home', pageBuilder: (_, __) => const NoTransitionPage(child: HomeScreen())),
           GoRoute(path: '/upcoming', pageBuilder: (_, __) => const NoTransitionPage(child: CurriculumListScreen())),
           GoRoute(path: '/team_members', pageBuilder: (_, __) => const NoTransitionPage(child: TeamMemberScreen())),
-
-          // [수정] '/stream' 경로는 목록 화면(StreamListScreen)으로 연결
           GoRoute(path: '/stream', pageBuilder: (_, __) => const NoTransitionPage(child: StreamListScreen())),
-
           GoRoute(path: '/profile', pageBuilder: (_, __) => const NoTransitionPage(child: ProfileScreen())),
         ],
       ),
