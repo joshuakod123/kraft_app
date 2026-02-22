@@ -7,7 +7,9 @@ import '../../core/constants/department_enum.dart';
 import '../../core/state/global_providers.dart';
 import '../../features/admin/manager_provider.dart';
 import 'widgets/dept_notice_card.dart';
-import 'widgets/home_magazine_section.dart'; // [NEW] 매거진 위젯 import
+
+// [수정됨] 매거진 폴더로 옮긴 위젯을 import 합니다.
+import '../../features/magazine/widgets/magazine_home_preview.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -17,14 +19,18 @@ class HomeScreen extends ConsumerWidget {
     final dept = ref.watch(currentDeptProvider);
     final isManager = ref.watch(isManagerProvider);
 
+    // 배경색 상수가 없다면 기본값 사용 (블랙)
+    const kAppBackgroundColor = Color(0xFF101010);
+
     return Scaffold(
+      backgroundColor: kAppBackgroundColor,
       body: CustomScrollView(
         slivers: [
           // 1. 앱바 영역
           SliverAppBar(
             expandedHeight: 220.0,
             pinned: true,
-            backgroundColor: kAppBackgroundColor, // 배경색 (상수 사용 가정)
+            backgroundColor: kAppBackgroundColor,
             flexibleSpace: FlexibleSpaceBar(
               titlePadding: const EdgeInsets.only(left: 16, bottom: 16),
               title: Text(
@@ -40,7 +46,7 @@ class HomeScreen extends ConsumerWidget {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      dept.color.withValues(alpha: 0.25),
+                      dept.color.withOpacity(0.25), // withValues 대신 호환성 좋은 opacity 사용
                       kAppBackgroundColor,
                     ],
                   ),
@@ -49,7 +55,7 @@ class HomeScreen extends ConsumerWidget {
                   child: Icon(
                     dept.icon,
                     size: 120,
-                    color: dept.color.withValues(alpha: 0.1),
+                    color: dept.color.withOpacity(0.1),
                   ),
                 ),
               ),
@@ -58,7 +64,7 @@ class HomeScreen extends ConsumerWidget {
               // 관리자 메뉴
               if (isManager)
                 PopupMenuButton<String>(
-                  icon: const Icon(Icons.admin_panel_settings_outlined, size: 28),
+                  icon: const Icon(Icons.admin_panel_settings_outlined, size: 28, color: Colors.white),
                   tooltip: '임원진 메뉴',
                   color: const Color(0xFF1E1E1E),
                   onSelected: (value) {
@@ -93,7 +99,7 @@ class HomeScreen extends ConsumerWidget {
                 ),
               // 출석 스캔 버튼
               IconButton(
-                icon: const Icon(Icons.qr_code_scanner),
+                icon: const Icon(Icons.qr_code_scanner, color: Colors.white),
                 onPressed: () => context.push('/attendance_scan'),
               ),
               const SizedBox(width: 8),
@@ -127,9 +133,9 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
 
-          // 3. [NEW] 매거진 섹션 (패딩은 위젯 내부에서 처리하여 더 넓게 표현)
+          // 3. [수정됨] 매거진 섹션 (새로 만든 위젯 사용)
           const SliverToBoxAdapter(
-            child: HomeMagazineSection(),
+            child: MagazineHomePreview(),
           ),
 
           // 하단 여백 확보

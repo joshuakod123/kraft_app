@@ -16,24 +16,26 @@ class _MagazineUploadScreenState extends ConsumerState<MagazineUploadScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _subtitleController = TextEditingController();
-  final _contentController = TextEditingController();
+  final _urlController = TextEditingController(); // 노션 링크나 PDF URL
 
-  File? _selectedImage;
+  File? _imageFile;
   bool _isLoading = false;
 
+  // 이미지 선택
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
       setState(() {
-        _selectedImage = File(pickedFile.path);
+        _imageFile = File(pickedFile.path);
       });
     }
   }
 
+  // 업로드 로직
   Future<void> _uploadMagazine() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedImage == null) {
+    if (_imageFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('커버 이미지를 선택해주세요.')));
       return;
     }
@@ -42,116 +44,130 @@ class _MagazineUploadScreenState extends ConsumerState<MagazineUploadScreen> {
 
     try {
       final supabase = Supabase.instance.client;
-      final user = supabase.auth.currentUser;
+      final fileName = 'mag_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
-      if (user == null) throw "로그인이 필요합니다.";
+      // 1. Storage에 이미지 업로드 (Bucket 이름: 'magazine_covers'라고 가정)
+      // [주의] Supabase Storage에 'magazine_covers' 버킷을 Public으로 생성해야 합니다.
+      await supabase.storage.from('magazine_covers').upload(
+        fileName,
+        _imageFile!,
+        fileOptions: const FileOptions(contentType: 'image/jpeg'),
+      );
 
-      // 1. 이미지 업로드
-      final fileExt = _selectedImage!.path.split('.').last;
-
-      // [FIX] toMillisecondsSinceEpoch -> millisecondsSinceEpoch 로 수정!
-      final fileName = '${DateTime.now().millisecondsSinceEpoch}.$fileExt';
-
-      final filePath = '${user.id}/$fileName';
-
-      await supabase.storage.from('magazines').upload(filePath, _selectedImage!);
-      final imageUrl = supabase.storage.from('magazines').getPublicUrl(filePath);
+      final imageUrl = supabase.storage.from('magazine_covers').getPublicUrl(fileName);
 
       // 2. DB Insert
       await supabase.from('magazines').insert({
         'title': _titleController.text,
         'subtitle': _subtitleController.text,
-        'content': _contentController.text,
         'cover_image_url': imageUrl,
-        'author_id': user.id,
-        'author_name': user.userMetadata?['name'] ?? 'Unknown',
+        'content_url': _urlController.text,
         'created_at': DateTime.now().toIso8601String(),
       });
 
       if (mounted) {
-        context.pop();
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('매거진 발행 성공!')));
+        context.pop(); // 목록으로 복귀
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('업로드 실패: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('에러 발생: $e')));
       }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('새 매거진 발행')),
+      backgroundColor: const Color(0xFF101010),
+      appBar: AppBar(
+        title: const Text("매거진 발행"),
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.white,
+      ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Form(
           key: _formKey,
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // 이미지 선택 영역
               GestureDetector(
                 onTap: _pickImage,
                 child: Container(
+                  width: double.infinity,
                   height: 200,
                   decoration: BoxDecoration(
-                    color: Colors.grey[200],
+                    color: Colors.grey[900],
                     borderRadius: BorderRadius.circular(12),
-                    image: _selectedImage != null
-                        ? DecorationImage(image: FileImage(_selectedImage!), fit: BoxFit.cover)
+                    border: Border.all(color: Colors.grey[800]!),
+                    image: _imageFile != null
+                        ? DecorationImage(image: FileImage(_imageFile!), fit: BoxFit.cover)
                         : null,
                   ),
-                  child: _selectedImage == null
-                      ? const Center(child: Column(
+                  child: _imageFile == null
+                      ? const Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.add_photo_alternate, size: 40, color: Colors.grey),
-                      Text("커버 이미지 선택"),
+                      SizedBox(height: 8),
+                      Text("커버 이미지 선택", style: TextStyle(color: Colors.grey)),
                     ],
-                  ))
+                  )
                       : null,
                 ),
               ),
-              const SizedBox(height: 20),
-              TextFormField(
-                controller: _titleController,
-                decoration: const InputDecoration(labelText: '제목', border: OutlineInputBorder()),
-                validator: (value) => value!.isEmpty ? '제목을 입력하세요' : null,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _subtitleController,
-                decoration: const InputDecoration(labelText: '부제목 (한 줄 요약)', border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _contentController,
-                maxLines: 15,
-                decoration: const InputDecoration(
-                  labelText: '본문 (Markdown 지원)',
-                  border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
-                ),
-                validator: (value) => value!.isEmpty ? '내용을 입력하세요' : null,
-              ),
               const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _isLoading ? null : _uploadMagazine,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  backgroundColor: Theme.of(context).primaryColor,
-                  foregroundColor: Colors.white,
+
+              _buildTextField("제목", _titleController),
+              const SizedBox(height: 16),
+              _buildTextField("부제목", _subtitleController),
+              const SizedBox(height: 16),
+              _buildTextField("기사 URL (Notion/Blog 등)", _urlController),
+
+              const SizedBox(height: 40),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _uploadMagazine,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6B4DFF),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text("발행하기", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 ),
-                child: _isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text('발행하기', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildTextField(String label, TextEditingController controller) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: controller,
+          style: const TextStyle(color: Colors.white),
+          validator: (value) => value!.isEmpty ? "필수 입력값입니다." : null,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: Colors.grey[900],
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+          ),
+        ),
+      ],
     );
   }
 }

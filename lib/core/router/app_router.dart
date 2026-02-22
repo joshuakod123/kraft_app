@@ -56,14 +56,20 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/assignment_upload', builder: (_, state) => AssignmentUploadScreen(item: state.extra as dynamic)),
 
       // [NEW] 매거진 라우트 (이제 MagazineListScreen을 확실히 인식합니다)
-      GoRoute(path: '/magazine_list', builder: (_, __) => const MagazineListScreen()),
-      GoRoute(path: '/magazine_upload', builder: (_, __) => const MagazineUploadScreen()),
       GoRoute(
-          path: '/magazine_detail',
-          builder: (context, state) {
-            final magazine = state.extra as Magazine;
-            return MagazineDetailScreen(magazine: magazine);
-          }
+        path: '/magazine_list',
+        builder: (context, state) => const MagazineListScreen(),
+      ),
+      GoRoute(
+        path: '/magazine_upload',
+        builder: (context, state) => const MagazineUploadScreen(),
+      ),
+      GoRoute(
+        path: '/magazine_detail',
+        builder: (context, state) {
+          final mag = state.extra as Magazine; // extra로 데이터 전달
+          return MagazineDetailScreen(magazine: mag);
+        },
       ),
 
       ShellRoute(

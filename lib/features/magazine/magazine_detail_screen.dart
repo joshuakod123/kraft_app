@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart'; // 패키지 추가 필수
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart'; // [필요] pubspec.yaml에 url_launcher 추가
 import 'magazine_model.dart';
 
 class MagazineDetailScreen extends StatelessWidget {
@@ -8,15 +8,23 @@ class MagazineDetailScreen extends StatelessWidget {
 
   const MagazineDetailScreen({super.key, required this.magazine});
 
+  Future<void> _launchUrl() async {
+    final Uri url = Uri.parse(magazine.contentUrl);
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+      throw Exception('Could not launch $url');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: const Color(0xFF101010),
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 400.0,
+            expandedHeight: 400,
             pinned: true,
+            backgroundColor: const Color(0xFF101010),
             flexibleSpace: FlexibleSpaceBar(
               background: Image.network(
                 magazine.coverImageUrl,
@@ -33,10 +41,10 @@ class MagazineDetailScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "Published on ${magazine.createdAt.toString().split(' ')[0]}",
-                    style: const TextStyle(color: Colors.grey),
+                    "KRAFT WEEKLY",
+                    style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   Text(
                     magazine.title,
                     style: GoogleFonts.playfairDisplay(
@@ -45,30 +53,29 @@ class MagazineDetailScreen extends StatelessWidget {
                       color: Colors.white,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 16),
                   Text(
                     magazine.subtitle,
                     style: const TextStyle(
-                      fontSize: 18,
                       color: Colors.white70,
-                      fontStyle: FontStyle.italic,
+                      fontSize: 18,
+                      height: 1.6,
                     ),
                   ),
-                  const Divider(height: 40, color: Colors.grey),
-
-                  // 마크다운 렌더링
-                  MarkdownBody(
-                    data: magazine.content,
-                    styleSheet: MarkdownStyleSheet(
-                      p: const TextStyle(color: Colors.white, fontSize: 16, height: 1.6),
-                      h1: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-                      h2: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                      h3: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                      listBullet: const TextStyle(color: Colors.white),
-                      blockquote: const TextStyle(color: Colors.grey),
+                  const SizedBox(height: 40),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: ElevatedButton(
+                      onPressed: _launchUrl,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text("Read Full Article", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
                   ),
-                  const SizedBox(height: 100),
                 ],
               ),
             ),
