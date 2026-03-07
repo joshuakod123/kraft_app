@@ -54,6 +54,7 @@ class AuthNotifier extends Notifier<AuthStatus> {
 
     // 전역 상태 설정
     ref.read(currentDeptProvider.notifier).setDept(dept);
+    // 명확하게 권한 설정
     ref.read(isManagerProvider.notifier).setManager(profile['role'] == 'manager');
   }
 
@@ -89,6 +90,8 @@ class AuthNotifier extends Notifier<AuthStatus> {
 
     if (success) {
       ref.read(currentDeptProvider.notifier).setDept(dept);
+      // [중요 수정] 신규 가입자는 무조건 멤버이므로 매니저 권한 false로 강제 초기화
+      ref.read(isManagerProvider.notifier).setManager(false);
       state = AuthStatus.authenticated;
     } else {
       throw "프로필 저장 실패";
@@ -97,10 +100,11 @@ class AuthNotifier extends Notifier<AuthStatus> {
 
   Future<void> logout() async {
     await Supabase.instance.client.auth.signOut();
+    // [중요 수정] 로그아웃 시 매니저 권한 초기화하여 다음 로그인 계정에 영향 주지 않도록 수정
+    ref.read(isManagerProvider.notifier).setManager(false);
     state = AuthStatus.unauthenticated;
   }
 
-  // [수정됨] 누락되었던 계정 삭제 기능 추가
   Future<void> deleteAccount() async {
     try {
       // 1. Repository를 통해 DB 및 Auth에서 계정 삭제 요청

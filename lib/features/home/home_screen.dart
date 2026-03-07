@@ -8,9 +8,6 @@ import '../../core/state/global_providers.dart';
 import '../../features/admin/manager_provider.dart';
 import 'widgets/dept_notice_card.dart';
 
-// [수정됨] 매거진 폴더로 옮긴 위젯을 import 합니다.
-import '../../features/magazine/widgets/magazine_home_preview.dart';
-
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
@@ -19,7 +16,6 @@ class HomeScreen extends ConsumerWidget {
     final dept = ref.watch(currentDeptProvider);
     final isManager = ref.watch(isManagerProvider);
 
-    // 배경색 상수가 없다면 기본값 사용 (블랙)
     const kAppBackgroundColor = Color(0xFF101010);
 
     return Scaffold(
@@ -46,7 +42,7 @@ class HomeScreen extends ConsumerWidget {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      dept.color.withOpacity(0.25), // withValues 대신 호환성 좋은 opacity 사용
+                      dept.color.withOpacity(0.25),
                       kAppBackgroundColor,
                     ],
                   ),
@@ -131,11 +127,6 @@ class HomeScreen extends ConsumerWidget {
                 ],
               ),
             ),
-          ),
-
-          // 3. [수정됨] 매거진 섹션 (새로 만든 위젯 사용)
-          const SliverToBoxAdapter(
-            child: MagazineHomePreview(),
           ),
 
           // 하단 여백 확보

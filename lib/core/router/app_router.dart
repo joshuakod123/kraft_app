@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-// [중요] 절대 경로로 변경하여 import 오류 방지
 import 'package:kraft_app/common/layout/main_shell.dart';
 import 'package:kraft_app/features/auth/auth_provider.dart';
 import 'package:kraft_app/features/auth/login_screen.dart';
@@ -18,12 +17,6 @@ import 'package:kraft_app/features/attendance/attendance_list_screen.dart';
 import 'package:kraft_app/features/archive/archive_screen.dart';
 import 'package:kraft_app/features/profile/profile_screen.dart';
 import 'package:kraft_app/features/home/team_member_screen.dart';
-
-// [NEW] 매거진 관련 스크린 import (절대 경로)
-import 'package:kraft_app/features/magazine/magazine_list_screen.dart';
-import 'package:kraft_app/features/magazine/magazine_detail_screen.dart';
-import 'package:kraft_app/features/magazine/magazine_upload_screen.dart';
-import 'package:kraft_app/features/magazine/magazine_model.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authStateListenable = ValueNotifier<AuthStatus>(AuthStatus.initial);
@@ -54,23 +47,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       // 일반 기능
       GoRoute(path: '/archive', builder: (_, __) => const ArchiveScreen()),
       GoRoute(path: '/assignment_upload', builder: (_, state) => AssignmentUploadScreen(item: state.extra as dynamic)),
-
-      // [NEW] 매거진 라우트 (이제 MagazineListScreen을 확실히 인식합니다)
-      GoRoute(
-        path: '/magazine_list',
-        builder: (context, state) => const MagazineListScreen(),
-      ),
-      GoRoute(
-        path: '/magazine_upload',
-        builder: (context, state) => const MagazineUploadScreen(),
-      ),
-      GoRoute(
-        path: '/magazine_detail',
-        builder: (context, state) {
-          final mag = state.extra as Magazine; // extra로 데이터 전달
-          return MagazineDetailScreen(magazine: mag);
-        },
-      ),
 
       ShellRoute(
         builder: (context, state, child) => MainShell(child: child),
