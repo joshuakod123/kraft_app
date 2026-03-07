@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
@@ -12,20 +11,56 @@ class AttendanceListScreen extends StatefulWidget {
 }
 
 class _AttendanceListScreenState extends State<AttendanceListScreen> {
-  // 필터 상태 관리
-  String _selectedSession = '전체';
-  String _selectedTeam = '전체';
+  // 필터 상태 (ID 기준)
+  int? _selectedCurriculumId;
+  int? _selectedTeamId;
+
+  // 이름 매핑을 위한 메모리 캐시
+  final Map<int, String> _teamMap = {};
+  final Map<int, String> _curriculumMap = {};
+  bool _mapsLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMaps();
+  }
+
+  // 화면 진입 시 부서/세션 이름을 미리 한 번만 불러옵니다.
+  Future<void> _loadMaps() async {
+    final client = Supabase.instance.client;
+    final teamsData = await client.from('teams').select('id, name');
+    final curriculumsData = await client.from('curriculums').select('id, title');
+
+    if (mounted) {
+      setState(() {
+        for (var t in teamsData) {
+          _teamMap[t['id'] as int] = t['name'] as String;
+        }
+        for (var c in curriculumsData) {
+          _curriculumMap[c['id'] as int] = c['title'] as String;
+        }
+        _mapsLoaded = true;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    // DB의 attendance 테이블을 실시간 구독
+    if (!_mapsLoaded) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF121212),
+        body: Center(child: CircularProgressIndicator(color: Colors.orangeAccent)),
+      );
+    }
+
     final stream = Supabase.instance.client
         .from('attendance')
         .stream(primaryKey: ['id'])
         .order('created_at', ascending: false);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF121212), // 배경색 통일
+      backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
         title: const Text('📋 실시간 출석 현황', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF1E1E1E),
@@ -35,39 +70,30 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
       body: StreamBuilder<List<Map<String, dynamic>>>(
         stream: stream,
         builder: (context, snapshot) {
-          // 1. 에러 처리
           if (snapshot.hasError) {
             return Center(
-              child: Text(
-                '데이터 로딩 실패\n${snapshot.error}',
-                style: const TextStyle(color: Colors.redAccent),
-                textAlign: TextAlign.center,
-              ),
+              child: Text('데이터 로딩 실패\n${snapshot.error}', style: const TextStyle(color: Colors.redAccent)),
             );
           }
 
-          // 2. 로딩 중
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
           final rawData = snapshot.data ?? [];
-
-          // 3. 데이터 가공 (모델 변환)
           final allLogs = rawData.map((json) => AttendanceLog.fromJson(json)).toList();
 
-          // 4. 필터 옵션 추출 (데이터에 존재하는 항목만)
-          final Set<String> sessions = {'전체', ...allLogs.map((e) => e.sessionName)};
-          final Set<String> teams = {'전체', ...allLogs.map((e) => e.teamName)};
+          // 필터 옵션 추출 (기록이 있는 ID만 모음)
+          final Set<int> presentSessionIds = allLogs.map((e) => e.curriculumId).toSet();
+          final Set<int> presentTeamIds = allLogs.map((e) => e.teamId).toSet();
 
-          // 최신순 정렬 등을 위해 리스트로 변환
-          final sessionOptions = sessions.toList()..sort(); // 가나다순 (필요시 로직 변경 가능)
-          final teamOptions = teams.toList()..sort();
+          final sessionOptions = presentSessionIds.toList();
+          final teamOptions = presentTeamIds.toList();
 
-          // 5. 실제 필터링 로직
+          // 실제 필터링 진행
           final filteredLogs = allLogs.where((log) {
-            final matchSession = _selectedSession == '전체' || log.sessionName == _selectedSession;
-            final matchTeam = _selectedTeam == '전체' || log.teamName == _selectedTeam;
+            final matchSession = _selectedCurriculumId == null || log.curriculumId == _selectedCurriculumId;
+            final matchTeam = _selectedTeamId == null || log.teamId == _selectedTeamId;
             return matchSession && matchTeam;
           }).toList();
 
@@ -84,28 +110,31 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // (1) 세션 선택 (Dropdown)
+                    // (1) 세션 선택
                     Row(
                       children: [
                         const Icon(Icons.calendar_today_rounded, color: Colors.white70, size: 18),
                         const SizedBox(width: 8),
                         Expanded(
                           child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: sessions.contains(_selectedSession) ? _selectedSession : '전체',
+                            child: DropdownButton<int?>(
+                              value: presentSessionIds.contains(_selectedCurriculumId) ? _selectedCurriculumId : null,
                               dropdownColor: const Color(0xFF2C2C2C),
                               style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                               icon: const Icon(Icons.arrow_drop_down_rounded, color: Colors.orangeAccent),
                               isExpanded: true,
-                              items: sessionOptions.map((String value) {
-                                return DropdownMenuItem<String>(
-                                  value: value,
-                                  child: Text(value),
-                                );
-                              }).toList(),
+                              items: [
+                                const DropdownMenuItem<int?>(value: null, child: Text('전체 세션')),
+                                ...sessionOptions.map((id) {
+                                  return DropdownMenuItem<int?>(
+                                    value: id,
+                                    child: Text(_curriculumMap[id] ?? '알 수 없는 세션'),
+                                  );
+                                }),
+                              ],
                               onChanged: (newValue) {
                                 setState(() {
-                                  _selectedSession = newValue!;
+                                  _selectedCurriculumId = newValue;
                                 });
                               },
                             ),
@@ -115,33 +144,20 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // (2) 부서 선택 (Chips)
+                    // (2) 부서 선택
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
-                        children: teamOptions.map((team) {
-                          final isSelected = _selectedTeam == team;
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 8.0),
-                            child: ChoiceChip(
-                              label: Text(team),
-                              selected: isSelected,
-                              onSelected: (bool selected) {
-                                setState(() {
-                                  _selectedTeam = selected ? team : '전체';
-                                });
-                              },
-                              selectedColor: Colors.orangeAccent,
-                              backgroundColor: Colors.white10,
-                              labelStyle: TextStyle(
-                                color: isSelected ? Colors.black : Colors.white70,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                              side: BorderSide.none,
-                            ),
-                          );
-                        }).toList(),
+                        children: [
+                          _buildFilterChip('전체', isSelected: _selectedTeamId == null, onSelected: () => setState(() => _selectedTeamId = null)),
+                          ...teamOptions.map((id) {
+                            return _buildFilterChip(
+                              _teamMap[id] ?? '알 수 없음',
+                              isSelected: _selectedTeamId == id,
+                              onSelected: () => setState(() => _selectedTeamId = id),
+                            );
+                          }),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -159,9 +175,9 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
                       "총 ${filteredLogs.length}명 출석",
                       style: const TextStyle(color: Colors.white70, fontSize: 14),
                     ),
-                    if (_selectedSession != '전체')
+                    if (_selectedCurriculumId != null)
                       Text(
-                        _selectedSession,
+                        _curriculumMap[_selectedCurriculumId!] ?? '',
                         style: const TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold, fontSize: 12),
                       ),
                   ],
@@ -187,8 +203,10 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
                   itemBuilder: (context, index) {
                     final log = filteredLogs[index];
                     final timeStr = DateFormat('HH:mm').format(log.createdAt.toLocal());
+                    final sessionName = _curriculumMap[log.curriculumId] ?? '알 수 없는 세션';
+                    final teamName = _teamMap[log.teamId] ?? '알 수 없는 팀';
 
-                    return _buildAttendanceCard(log, timeStr);
+                    return _buildAttendanceCard(log.userId, sessionName, teamName, timeStr);
                   },
                 ),
               ),
@@ -199,7 +217,26 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
     );
   }
 
-  Widget _buildAttendanceCard(AttendanceLog log, String timeStr) {
+  Widget _buildFilterChip(String label, {required bool isSelected, required VoidCallback onSelected}) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8.0),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: isSelected,
+        onSelected: (_) => onSelected(),
+        selectedColor: Colors.orangeAccent,
+        backgroundColor: Colors.white10,
+        labelStyle: TextStyle(
+          color: isSelected ? Colors.black : Colors.white70,
+          fontWeight: FontWeight.bold,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        side: BorderSide.none,
+      ),
+    );
+  }
+
+  Widget _buildAttendanceCard(String userId, String sessionName, String teamName, String timeStr) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
@@ -211,13 +248,12 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         leading: CircleAvatar(
           backgroundColor: Colors.white10,
-          child: _UserNameLabel(userId: log.userId, onlyInitial: true),
+          child: _UserNameLabel(userId: userId, onlyInitial: true),
         ),
         title: Row(
           children: [
-            _UserNameLabel(userId: log.userId),
+            _UserNameLabel(userId: userId),
             const SizedBox(width: 8),
-            // 부서명 뱃지
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
@@ -225,7 +261,7 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
-                log.teamName,
+                teamName,
                 style: const TextStyle(fontSize: 10, color: Colors.white70),
               ),
             ),
@@ -234,7 +270,7 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4.0),
           child: Text(
-            '${log.sessionName} • $timeStr 출석',
+            '$sessionName • $timeStr 출석',
             style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
           ),
         ),
@@ -244,7 +280,6 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
   }
 }
 
-// 사용자 이름을 비동기로 가져오는 위젯
 class _UserNameLabel extends StatelessWidget {
   final String userId;
   final bool onlyInitial;
@@ -267,7 +302,6 @@ class _UserNameLabel extends StatelessWidget {
         if (!snapshot.hasData) {
           return Text(onlyInitial ? '...' : '...', style: const TextStyle(color: Colors.grey));
         }
-
         final name = snapshot.data?['name'] as String? ?? '알 수 없음';
 
         if (onlyInitial) {

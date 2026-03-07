@@ -66,12 +66,18 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> with Widget
 
     try {
       final Map<String, dynamic> data = jsonDecode(rawData);
-      final String sessionName = data['s'] ?? '알 수 없는 세션';
-      final String teamName = data['t'] ?? '알 수 없는 팀';
+
+      // QR에서 숫자 ID 추출
+      final int? curriculumId = data['c'] as int?;
+      final int? teamId = data['t'] as int?;
+
+      if (curriculumId == null || teamId == null) {
+        throw const FormatException();
+      }
 
       await SupabaseRepository().markAttendance(
-        sessionName: sessionName,
-        teamName: teamName,
+        curriculumId: curriculumId,
+        qrTeamId: teamId,
       );
 
       if (!mounted) return;
@@ -82,14 +88,14 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> with Widget
         builder: (context) => AlertDialog(
           backgroundColor: const Color(0xFF1E1E1E),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          content: Column(
+          content: const Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 64),
-              const SizedBox(height: 16),
-              const Text('출석 완료!', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Text('$sessionName / $teamName', style: const TextStyle(color: Colors.white70)),
+              Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 64),
+              SizedBox(height: 16),
+              Text('출석 완료!', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+              SizedBox(height: 8),
+              Text('세션 출석이 확인되었습니다.', style: TextStyle(color: Colors.white70)),
             ],
           ),
           actions: [
@@ -118,7 +124,7 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> with Widget
         context: context,
         builder: (context) => AlertDialog(
           backgroundColor: const Color(0xFF1E1E1E),
-          title: const Text("오류", style: TextStyle(color: Colors.redAccent)),
+          title: const Text("출석 실패", style: TextStyle(color: Colors.redAccent)),
           content: Text(errorMessage, style: const TextStyle(color: Colors.white)),
           actions: [
             TextButton(
@@ -180,7 +186,6 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> with Widget
             controller: _cameraController,
             scanWindow: scanWindow,
             onDetect: _handleBarcode,
-            // [수정 완료] child 인자를 제거하여 (context, error) 2개만 받도록 수정
             errorBuilder: (context, error) {
               return Container(
                 color: Colors.black,

@@ -11,9 +11,8 @@ class SupabaseRepository {
   String? get currentUserId => _client.auth.currentUser?.id;
 
   // ==========================================================
-  // [Auth & Profile]
+  // [Auth & Profile] (기존과 동일)
   // ==========================================================
-
   Future<String?> signIn({required String email, required String password}) async {
     try {
       await _client.auth.signInWithPassword(email: email, password: password);
@@ -33,15 +32,11 @@ class SupabaseRepository {
   }
 
   Future<Map<String, dynamic>?> requestTemporaryPassword({
-    required String email,
-    required String name,
-    required String phone,
+    required String email, required String name, required String phone,
   }) async {
     try {
       final response = await _client.rpc('reset_password_with_verification', params: {
-        'p_email': email,
-        'p_name': name,
-        'p_phone': phone,
+        'p_email': email, 'p_name': name, 'p_phone': phone,
       });
       if (response == null) return null;
       return Map<String, dynamic>.from(response);
@@ -52,21 +47,17 @@ class SupabaseRepository {
   }
 
   Future<String?> changePassword({
-    required String currentPassword,
-    required String newPassword,
+    required String currentPassword, required String newPassword,
   }) async {
     try {
       final user = _client.auth.currentUser;
       if (user == null || user.email == null) return '로그인이 필요합니다.';
 
       final authResponse = await _client.auth.signInWithPassword(
-        email: user.email!,
-        password: currentPassword,
+        email: user.email!, password: currentPassword,
       );
 
-      if (authResponse.user == null) {
-        return '기존 비밀번호가 일치하지 않습니다.';
-      }
+      if (authResponse.user == null) return '기존 비밀번호가 일치하지 않습니다.';
 
       await _client.auth.updateUser(UserAttributes(password: newPassword));
       await _client.from('users').update({'is_temp_password': false}).eq('id', user.id);
@@ -91,13 +82,8 @@ class SupabaseRepository {
   }
 
   Future<bool> updateUserProfile({
-    required String name,
-    required String major,
-    required String phone,
-    required int teamId,
-    required String school,
-    required String studentId,
-    required String gender,
+    required String name, required String major, required String phone,
+    required int teamId, required String school, required String studentId, required String gender,
   }) async {
     try {
       final user = _client.auth.currentUser;
@@ -109,17 +95,9 @@ class SupabaseRepository {
       }
 
       await _client.from('users').upsert({
-        'id': user.id,
-        'email': user.email,
-        'name': name,
-        'major': major,
-        'phone': phone,
-        'team_id': teamId,
-        'school': school,
-        'student_id': studentId,
-        'gender': gender,
-        'cohort': cohort,
-        'updated_at': DateTime.now().toIso8601String(),
+        'id': user.id, 'email': user.email, 'name': name, 'major': major, 'phone': phone,
+        'team_id': teamId, 'school': school, 'student_id': studentId, 'gender': gender,
+        'cohort': cohort, 'updated_at': DateTime.now().toIso8601String(),
       });
       return true;
     } catch (e) {
@@ -133,11 +111,7 @@ class SupabaseRepository {
       final userId = _client.auth.currentUser?.id;
       if (userId == null) return false;
 
-      final data = await _client
-          .from('users')
-          .select('role')
-          .eq('id', userId)
-          .maybeSingle();
+      final data = await _client.from('users').select('role').eq('id', userId).maybeSingle();
 
       if (data == null) return false;
       final role = data['role'] as String?;
@@ -156,9 +130,8 @@ class SupabaseRepository {
   }
 
   // ==========================================================
-  // [공식 일정] Curriculums (수정됨)
+  // [공식 일정] Curriculums
   // ==========================================================
-
   Stream<List<Map<String, dynamic>>> getCurriculumsStream(int teamId) {
     return _client
         .from('curriculums')
@@ -167,43 +140,34 @@ class SupabaseRepository {
         .order('event_date', ascending: true);
   }
 
-  // [수정] 시작 시간(event_date)과 종료 시간(end_time)을 정확히 받도록 변경
   Future<bool> addCurriculum({
-    required String title,
-    required String description,
-    required DateTime startTime,
-    required DateTime endTime,
-    required int weekNumber,
-    int? teamId,
+    required String title, required String description,
+    required DateTime startTime, required DateTime endTime,
+    required int weekNumber, int? teamId,
   }) async {
     try {
       await _client.from('curriculums').insert({
-        'title': title,
-        'description': description,
-        'week_number': weekNumber,
-        'team_id': teamId ?? 1,
-        'event_date': startTime.toIso8601String(), // 시작 시간
-        'end_time': endTime.toIso8601String(),     // 종료 시간
-        'semester_id': 1,
+        'title': title, 'description': description, 'week_number': weekNumber,
+        'team_id': teamId ?? 1, 'event_date': startTime.toIso8601String(),
+        'end_time': endTime.toIso8601String(), 'semester_id': 1,
       });
       return true;
     } catch (e) {
-      debugPrint("Add Curriculum Error: $e");
       return false;
     }
   }
 
-  Future<List<String>> getSessionOptions(int teamId) async {
+  // [수정됨] 세션의 title뿐만 아니라 id도 가져옵니다.
+  Future<List<Map<String, dynamic>>> getSessionOptions(int teamId) async {
     try {
       final response = await _client
           .from('curriculums')
-          .select('title')
+          .select('id, title')
           .eq('team_id', teamId)
           .order('event_date', ascending: false)
           .limit(20);
 
-      final List<dynamic> data = response;
-      return data.map((e) => e['title'] as String).toSet().toList();
+      return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       debugPrint("Error fetching sessions: $e");
       return [];
@@ -222,7 +186,6 @@ class SupabaseRepository {
   // ==========================================================
   // [개인 일정] Personal Schedules
   // ==========================================================
-
   Stream<List<Map<String, dynamic>>> getPersonalSchedulesStream() {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return const Stream.empty();
@@ -239,16 +202,12 @@ class SupabaseRepository {
       final userId = _client.auth.currentUser?.id;
       if (userId == null) return false;
       await _client.from('personal_schedules').insert({
-        'user_id': userId,
-        'title': title,
-        'description': desc,
-        'start_time': date.toIso8601String(),
-        'end_time': endTime?.toIso8601String(),
-        'event_date': date.toIso8601String(), // 호환성 유지
+        'user_id': userId, 'title': title, 'description': desc,
+        'start_time': date.toIso8601String(), 'end_time': endTime?.toIso8601String(),
+        'event_date': date.toIso8601String(),
       });
       return true;
     } catch (e) {
-      debugPrint("Add Personal Schedule Error: $e");
       return false;
     }
   }
@@ -265,7 +224,6 @@ class SupabaseRepository {
   // ==========================================================
   // [Notices]
   // ==========================================================
-
   Stream<List<Map<String, dynamic>>> getNoticesStream(int teamId) {
     return _client.from('notices').stream(primaryKey: ['id']).eq('team_id', teamId).order('created_at', ascending: false);
   }
@@ -291,7 +249,6 @@ class SupabaseRepository {
   // ==========================================================
   // [Archives]
   // ==========================================================
-
   Future<List<Map<String, dynamic>>> fetchMyArchives() async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return [];
@@ -304,16 +261,12 @@ class SupabaseRepository {
           .order('created_at', ascending: false);
       return List<Map<String, dynamic>>.from(data);
     } catch (e) {
-      debugPrint("Archive Fetch Error: $e");
       return [];
     }
   }
 
   Future<void> saveArchiveLocally({
-    required String title,
-    required String description,
-    required File file,
-    required String fileName,
+    required String title, required String description, required File file, required String fileName,
   }) async {
     try {
       final user = _client.auth.currentUser;
@@ -328,11 +281,8 @@ class SupabaseRepository {
 
       final fileExtension = fileName.split('.').last;
       await _client.from('archives').insert({
-        'user_id': user.id,
-        'title': title,
-        'description': description,
-        'file_path': uniqueFileName,
-        'file_type': fileExtension,
+        'user_id': user.id, 'title': title, 'description': description,
+        'file_path': uniqueFileName, 'file_type': fileExtension,
       });
     } catch (e) {
       throw Exception('저장 실패: $e');
@@ -342,15 +292,10 @@ class SupabaseRepository {
   Future<void> deleteArchive(int id, String fileName) async {
     try {
       await _client.from('archives').delete().eq('id', id);
-
       final directory = await getApplicationDocumentsDirectory();
       final file = File('${directory.path}/$fileName');
-
-      if (await file.exists()) {
-        await file.delete();
-      }
+      if (await file.exists()) await file.delete();
     } catch (e) {
-      debugPrint("Delete Error: $e");
       throw Exception('삭제 실패: $e');
     }
   }
@@ -358,16 +303,11 @@ class SupabaseRepository {
   // ==========================================================
   // [Music Social Features]
   // ==========================================================
-
   Future<void> addComment(int songId, String content) async {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception("로그인이 필요합니다.");
 
-    await _client.from('comments').insert({
-      'song_id': songId,
-      'user_id': user.id,
-      'content': content,
-    });
+    await _client.from('comments').insert({'song_id': songId, 'user_id': user.id, 'content': content});
   }
 
   Future<List<Map<String, dynamic>>> fetchComments(int songId) async {
@@ -389,11 +329,7 @@ class SupabaseRepository {
 
   Future<List<MediaItem>> fetchSongs() async {
     try {
-      final List<dynamic> response = await _client
-          .from('songs')
-          .select('*')
-          .order('created_at', ascending: false);
-
+      final List<dynamic> response = await _client.from('songs').select('*').order('created_at', ascending: false);
       if (response.isEmpty) return [];
 
       final songs = response.map((song) {
@@ -411,17 +347,13 @@ class SupabaseRepository {
         }
 
         return MediaItem(
-          id: song['id'].toString(),
-          album: "Kraft Music",
-          title: song['title'] ?? '제목 없음',
+          id: song['id'].toString(), album: "Kraft Music", title: song['title'] ?? '제목 없음',
           artist: song['artist'] ?? '아티스트 미상',
           artUri: coverUrl.isNotEmpty ? Uri.tryParse(coverUrl) : null,
           extras: {'url': audioUrl},
         );
       }).toList();
-
       return songs;
-
     } catch (e) {
       return [];
     }
@@ -431,12 +363,7 @@ class SupabaseRepository {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return false;
     try {
-      final response = await _client
-          .from('song_likes')
-          .select()
-          .eq('user_id', userId)
-          .eq('song_id', songId)
-          .maybeSingle();
+      final response = await _client.from('song_likes').select().eq('user_id', userId).eq('song_id', songId).maybeSingle();
       return response != null;
     } catch (e) {
       return false;
@@ -445,10 +372,7 @@ class SupabaseRepository {
 
   Future<int> getSongLikeCount(int songId) async {
     try {
-      final count = await _client
-          .from('song_likes')
-          .count(CountOption.exact)
-          .eq('song_id', songId);
+      final count = await _client.from('song_likes').count(CountOption.exact).eq('song_id', songId);
       return count;
     } catch (e) {
       return 0;
@@ -461,17 +385,10 @@ class SupabaseRepository {
 
     final isLiked = await isSongLiked(songId);
     if (isLiked) {
-      await _client
-          .from('song_likes')
-          .delete()
-          .eq('user_id', userId)
-          .eq('song_id', songId);
+      await _client.from('song_likes').delete().eq('user_id', userId).eq('song_id', songId);
       return false;
     } else {
-      await _client.from('song_likes').insert({
-        'user_id': userId,
-        'song_id': songId,
-      });
+      await _client.from('song_likes').insert({'user_id': userId, 'song_id': songId});
       return true;
     }
   }
@@ -479,16 +396,9 @@ class SupabaseRepository {
   // ==========================================================
   // [Team Members & Attendance]
   // ==========================================================
-
   Future<List<Map<String, dynamic>>> getTeamMembers(int teamId) async {
     try {
-      final response = await _client
-          .from('users')
-          .select()
-          .eq('team_id', teamId)
-          .order('role', ascending: true)
-          .order('name', ascending: true);
-
+      final response = await _client.from('users').select().eq('team_id', teamId).order('role', ascending: true).order('name', ascending: true);
       final List<Map<String, dynamic>> members = List<Map<String, dynamic>>.from(response);
       members.sort((a, b) {
         if (a['role'] == 'manager' && b['role'] != 'manager') return -1;
@@ -505,11 +415,7 @@ class SupabaseRepository {
     try {
       final userId = _client.auth.currentUser?.id;
       if (userId == null) return [];
-      final response = await _client
-          .from('assignments')
-          .select('*, curriculums(title)')
-          .eq('user_id', userId)
-          .order('created_at', ascending: false);
+      final response = await _client.from('assignments').select('*, curriculums(title)').eq('user_id', userId).order('created_at', ascending: false);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       return [];
@@ -518,9 +424,10 @@ class SupabaseRepository {
 
   Future<bool> uploadAssignment(int curriculumId) async { return false; }
 
+  // [수정됨] 출석 체계 완벽 검증 및 DB 적용
   Future<void> markAttendance({
-    required String sessionName,
-    required String teamName,
+    required int curriculumId,
+    required int qrTeamId,
   }) async {
     final user = _client.auth.currentUser;
     if (user == null) {
@@ -528,16 +435,34 @@ class SupabaseRepository {
     }
 
     try {
-      await _client.from('attendance').insert({
-        'user_id': user.id,
-        'session_name': sessionName,
-        'team_name': teamName,
-      });
-    } on PostgrestException catch (e) {
-      if (e.code == '23505') {
+      // 1. 현재 사용자의 부서(team_id) 가져오기
+      final userData = await _client.from('users').select('team_id').eq('id', user.id).single();
+      final userTeamId = userData['team_id'] as int;
+
+      // 2. 다른 부서 QR 스캔 원천 차단
+      if (userTeamId != qrTeamId) {
+        throw Exception('소속 부서가 일치하지 않습니다.\n타 부서 세션에 출석할 수 없습니다.');
+      }
+
+      // 3. 중복 스캔 방지 (이미 출석한 기록이 있는지 확인)
+      final existing = await _client
+          .from('attendance')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('curriculum_id', curriculumId)
+          .maybeSingle();
+
+      if (existing != null) {
         throw Exception('이미 출석 처리된 세션입니다.');
       }
-      rethrow;
+
+      // 4. 출석 데이터 삽입
+      await _client.from('attendance').insert({
+        'user_id': user.id,
+        'curriculum_id': curriculumId,
+        'team_id': userTeamId,
+      });
+
     } catch (e) {
       rethrow;
     }

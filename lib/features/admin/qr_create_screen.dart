@@ -1,9 +1,7 @@
 import 'dart:convert';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import '../../core/constants/department_enum.dart';
 import '../../core/state/global_providers.dart';
 import '../../core/data/supabase_repository.dart';
 
@@ -17,11 +15,11 @@ class QrCreateScreen extends ConsumerStatefulWidget {
 class _QrCreateScreenState extends ConsumerState<QrCreateScreen> {
   final SupabaseRepository _repository = SupabaseRepository();
 
-  List<String> _sessionOptions = [];
-  String? _selectedSession;
+  List<Map<String, dynamic>> _sessionOptions = [];
+  int? _selectedSessionId;
+  String? _selectedSessionTitle;
 
   String? _generatedQrData;
-  bool _isLoading = false;
 
   @override
   void initState() {
@@ -29,32 +27,31 @@ class _QrCreateScreenState extends ConsumerState<QrCreateScreen> {
     _loadSessionOptions();
   }
 
-  // [수정 2] 세션 로딩 시 내 팀 ID 전달
   Future<void> _loadSessionOptions() async {
     final myDept = ref.read(currentDeptProvider);
-    final options = await _repository.getSessionOptions(myDept.id); // teamId 전달!
+    final options = await _repository.getSessionOptions(myDept.id);
 
     if (mounted) {
       setState(() {
         _sessionOptions = options;
         if (options.isNotEmpty) {
-          _selectedSession = options.first;
+          _selectedSessionId = options.first['id'] as int;
+          _selectedSessionTitle = options.first['title'] as String;
         }
       });
     }
   }
 
   void _generateQrCode() {
-    if (_selectedSession == null) return;
+    if (_selectedSessionId == null) return;
 
     final myDept = ref.read(currentDeptProvider);
 
-    // QR 데이터 JSON 생성
-    // s: 세션 이름, t: 팀 이름 (출석 처리 시 검증용)
+    // c: curriculumId(int), t: teamId(int)
     final Map<String, dynamic> qrData = {
-      's': _selectedSession,
-      't': myDept.name,
-      'ts': DateTime.now().millisecondsSinceEpoch, // 타임스탬프 (옵션)
+      'c': _selectedSessionId,
+      't': myDept.id,
+      'ts': DateTime.now().millisecondsSinceEpoch,
     };
 
     setState(() {
@@ -126,16 +123,25 @@ class _QrCreateScreenState extends ConsumerState<QrCreateScreen> {
                             border: Border.all(color: Colors.white24),
                           ),
                           child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: _selectedSession,
+                            child: DropdownButton<int>(
+                              value: _selectedSessionId,
                               dropdownColor: const Color(0xFF2C2C2C),
                               style: const TextStyle(color: Colors.white, fontSize: 16),
                               isExpanded: true,
                               icon: Icon(Icons.arrow_drop_down, color: themeColor),
                               items: _sessionOptions.map((e) {
-                                return DropdownMenuItem(value: e, child: Text(e));
+                                return DropdownMenuItem<int>(
+                                  value: e['id'] as int,
+                                  child: Text(e['title'] as String),
+                                );
                               }).toList(),
-                              onChanged: (val) => setState(() => _selectedSession = val),
+                              onChanged: (val) {
+                                setState(() {
+                                  _selectedSessionId = val;
+                                  _selectedSessionTitle = _sessionOptions.firstWhere((e) => e['id'] == val)['title'] as String;
+                                  _generatedQrData = null; // 선택이 바뀌면 QR 초기화
+                                });
+                              },
                             ),
                           ),
                         ),
@@ -187,7 +193,7 @@ class _QrCreateScreenState extends ConsumerState<QrCreateScreen> {
                         ),
                         const SizedBox(height: 24),
                         Text(
-                          "$_selectedSession",
+                          "$_selectedSessionTitle",
                           style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 8),
