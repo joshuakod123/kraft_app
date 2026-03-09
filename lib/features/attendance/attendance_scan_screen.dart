@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/data/supabase_repository.dart';
 import 'widgets/scanner_overlay.dart';
@@ -75,12 +76,15 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> with Widget
         throw const FormatException();
       }
 
-      await SupabaseRepository().markAttendance(
+      // 출석 처리 후 서버에서 계산된 벌금 받아오기
+      final int fineAmount = await SupabaseRepository().markAttendance(
         curriculumId: curriculumId,
         qrTeamId: teamId,
       );
 
       if (!mounted) return;
+
+      final bool isLate = fineAmount > 0;
 
       await showDialog(
         context: context,
@@ -88,23 +92,43 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> with Widget
         builder: (context) => AlertDialog(
           backgroundColor: const Color(0xFF1E1E1E),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          content: const Column(
+          content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 64),
-              SizedBox(height: 16),
-              Text('출석 완료!', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-              SizedBox(height: 8),
-              Text('세션 출석이 확인되었습니다.', style: TextStyle(color: Colors.white70)),
+              Icon(
+                  isLate ? Icons.warning_rounded : Icons.check_circle_rounded,
+                  color: isLate ? Colors.redAccent : Colors.greenAccent,
+                  size: 64
+              ),
+              const SizedBox(height: 16),
+              Text(
+                  isLate ? '지각입니다!' : '출석 완료!',
+                  style: TextStyle(
+                      color: isLate ? Colors.redAccent : Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold
+                  )
+              ),
+              const SizedBox(height: 12),
+              if (isLate) ...[
+                Text(
+                    '벌금 ${NumberFormat('#,###').format(fineAmount)}원이 부과되었습니다.',
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)
+                ),
+                const SizedBox(height: 8),
+                const Text('세션 시작 시간을 초과했습니다.', style: TextStyle(color: Colors.white54, fontSize: 13)),
+              ] else ...[
+                const Text('세션 출석이 확인되었습니다.', style: TextStyle(color: Colors.white70)),
+              ]
             ],
           ),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(context);
-                context.pop();
+                Navigator.pop(context); // 다이얼로그 닫기
+                context.pop(); // 스캔 화면 닫기
               },
-              child: const Text('확인', style: TextStyle(color: Colors.white)),
+              child: const Text('확인', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -227,7 +251,7 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> with Widget
           ),
           ScannerOverlay(scanWindow: scanWindow),
           if (_isProcessing)
-            const Center(child: CircularProgressIndicator(color: Colors.white)),
+            const Center(child: CircularProgressIndicator(color: Colors.orangeAccent)),
         ],
       ),
     );

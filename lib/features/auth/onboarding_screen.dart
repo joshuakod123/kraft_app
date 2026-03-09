@@ -14,14 +14,12 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // 컨트롤러 정의
   final _nameCtrl = TextEditingController();
-  final _schoolCtrl = TextEditingController();    // 학교
-  final _studentIdCtrl = TextEditingController(); // 학번
+  final _schoolCtrl = TextEditingController();
+  final _studentIdCtrl = TextEditingController();
   final _majorCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
 
-  // 선택 값
   Department? _selectedDept;
   String? _selectedGender;
 
@@ -55,7 +53,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('저장 실패: $e')));
+        // 알 수 없는 영어 에러 대신 직관적인 메세지
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('프로필 저장에 실패했습니다. 입력 항목이나 네트워크를 다시 확인해주세요.'))
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -85,24 +86,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
               _buildField("이름 (Name)", _nameCtrl),
 
-              // [수정] 학교 & 학번 Row
               Row(
                 children: [
                   Expanded(child: _buildField("대학교 (School)", _schoolCtrl)),
                   const SizedBox(width: 12),
-                  // [수정] 학번 힌트 텍스트 추가 ("ex) 21학번")
                   Expanded(child: _buildField("학번 (Student ID)", _studentIdCtrl, isNumber: true, hintText: "ex) 21학번")),
                 ],
               ),
 
               _buildField("학과 (Major)", _majorCtrl),
 
-              // [수정] 성별 선택 (한국어 변경)
               DropdownButtonFormField<String>(
                 dropdownColor: Colors.grey[900],
                 value: _selectedGender,
                 hint: const Text("성별 (Gender)", style: TextStyle(color: Colors.grey)),
-                // [변경] Male/Female -> 남성/여성
                 items: ['남성', '여성'].map((g) {
                   return DropdownMenuItem(value: g, child: Text(g, style: const TextStyle(color: Colors.white)));
                 }).toList(),
@@ -148,7 +145,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     );
   }
 
-  // [수정] hintText 파라미터 추가
   Widget _buildField(String label, TextEditingController controller, {bool isNumber = false, String? hintText}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16.0),
@@ -157,11 +153,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         keyboardType: isNumber ? TextInputType.number : TextInputType.text,
         style: const TextStyle(color: Colors.white),
         validator: (val) => val == null || val.isEmpty ? '필수 입력입니다.' : null,
-        // hintText 전달
         decoration: _inputDecoration().copyWith(
           labelText: label,
           hintText: hintText,
-          hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)), // 힌트 색상 흐리게
+          hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
         ),
       ),
     );
@@ -174,7 +169,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       fillColor: Colors.grey[900],
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
       focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Colors.white)),
-      floatingLabelBehavior: FloatingLabelBehavior.auto, // 클릭 시 라벨 위로 이동 + 힌트 표시
+      floatingLabelBehavior: FloatingLabelBehavior.auto,
     );
   }
 }

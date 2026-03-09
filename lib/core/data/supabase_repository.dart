@@ -425,7 +425,8 @@ class SupabaseRepository {
   Future<bool> uploadAssignment(int curriculumId) async { return false; }
 
   // [수정됨] 출석 체계 완벽 검증 및 DB 적용
-  Future<void> markAttendance({
+  // [수정됨] 출석 체계 완벽 검증 및 DB 적용 (벌금 반환 추가)
+  Future<int> markAttendance({
     required int curriculumId,
     required int qrTeamId,
   }) async {
@@ -444,7 +445,7 @@ class SupabaseRepository {
         throw Exception('소속 부서가 일치하지 않습니다.\n타 부서 세션에 출석할 수 없습니다.');
       }
 
-      // 3. 중복 스캔 방지 (이미 출석한 기록이 있는지 확인)
+      // 3. 중복 스캔 방지
       final existing = await _client
           .from('attendance')
           .select('id')
@@ -456,12 +457,15 @@ class SupabaseRepository {
         throw Exception('이미 출석 처리된 세션입니다.');
       }
 
-      // 4. 출석 데이터 삽입
-      await _client.from('attendance').insert({
+      // 4. 출석 데이터 삽입 후 트리거가 계산한 'fine(벌금)' 값을 반환받음
+      final response = await _client.from('attendance').insert({
         'user_id': user.id,
         'curriculum_id': curriculumId,
         'team_id': userTeamId,
-      });
+      }).select('fine').single();
+
+      // 서버에서 계산된 벌금을 리턴 (null이면 0)
+      return response['fine'] as int? ?? 0;
 
     } catch (e) {
       rethrow;

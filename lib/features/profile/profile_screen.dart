@@ -15,7 +15,6 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
-  // 프로필 데이터 새로고침을 위한 Future 변수
   late Future<Map<String, dynamic>?> _profileFuture;
 
   @override
@@ -51,7 +50,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     });
   }
 
-  // [기능 1] 설정 메뉴 열기 (Bottom Sheet)
   void _showSettingsModal(BuildContext context, Map<String, dynamic> user, Department dept) {
     showModalBottomSheet(
       context: context,
@@ -129,7 +127,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  // [기능 2] 프로필 수정 다이얼로그 (수정됨: Feedback 10 적용)
   void _showEditProfileDialog(Map<String, dynamic> user, Color pointColor) {
     final nameController = TextEditingController(text: user['name']);
     final majorController = TextEditingController(text: user['major']);
@@ -137,7 +134,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final schoolController = TextEditingController(text: user['school']);
     final studentIdController = TextEditingController(text: user['student_id']);
 
-    // 수정 불가능한 값들 (기존 값 유지)
     final int teamId = user['team_id'];
     final String gender = user['gender'] ?? 'M';
 
@@ -166,7 +162,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           TextButton(
             onPressed: () async {
               try {
-                // 업데이트 요청
                 await SupabaseRepository().updateUserProfile(
                   name: nameController.text,
                   major: majorController.text,
@@ -178,10 +173,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 );
 
                 if (context.mounted) {
-                  Navigator.pop(context); // 수정 입력창 닫기
-                  _refreshProfile(); // 화면 새로고침
+                  Navigator.pop(context);
+                  _refreshProfile();
 
-                  // [수정] SnackBar 대신 Dialog 팝업 사용
                   showDialog(
                     context: context,
                     builder: (context) => AlertDialog(
@@ -203,13 +197,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 }
               } catch (e) {
                 if (context.mounted) {
-                  // 에러 발생 시에도 팝업으로 알림
                   showDialog(
                     context: context,
                     builder: (context) => AlertDialog(
                       backgroundColor: const Color(0xFF1E1E1E),
                       title: const Text("오류", style: TextStyle(color: Colors.redAccent)),
-                      content: Text("수정 실패: $e", style: const TextStyle(color: Colors.white70)),
+                      content: const Text("수정에 실패했습니다. 잠시 후 다시 시도해주세요.", style: TextStyle(color: Colors.white70)),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(context),
@@ -244,7 +237,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  // [기능 3] 회원 탈퇴 확인
   void _showDeleteConfirmDialog(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
@@ -273,8 +265,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 }
               } catch (e) {
                 if (context.mounted) {
+                  // 탈퇴 실패 시 한국어 에러
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('오류 발생: $e')),
+                    const SnackBar(content: Text('계정 탈퇴 처리 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.')),
                   );
                 }
               }
@@ -326,7 +319,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const SizedBox(height: 20),
-                                // [1] 상단 프로필 헤더
                                 Row(
                                   children: [
                                     CircleAvatar(
@@ -356,7 +348,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                 ),
                                 const SizedBox(height: 40),
 
-                                // [2] 정보 타일들
                                 Row(
                                   children: [
                                     Expanded(child: _buildInfoTile("대학", school)),
@@ -384,7 +375,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                 const Spacer(),
                                 const SizedBox(height: 24),
 
-                                // [3] MY ARCHIVE 버튼 (메인 기능으로 유지)
                                 SizedBox(
                                   width: double.infinity,
                                   height: 56,
@@ -407,7 +397,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                     ),
 
-                    // [4] 우측 상단 설정 아이콘 (톱니바퀴)
                     if (user != null)
                       Positioned(
                         top: 16,
@@ -443,7 +432,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 }
 
-// 비밀번호 변경 다이얼로그
 class _ChangePasswordDialog extends StatefulWidget {
   final bool isForced;
   final Color pointColor;

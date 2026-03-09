@@ -19,12 +19,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailCtrl = TextEditingController();
   final _pwCtrl = TextEditingController();
 
-  // true: 로그인 모드, false: 회원가입 모드
   bool _isLogin = true;
   bool _isLoading = false;
   bool _keepLoggedIn = true;
 
-  // [Feedback 12] 에러 팝업 (SnackBar 대신 Dialog 사용)
   void _showErrorDialog(String message) {
     showDialog(
       context: context,
@@ -54,7 +52,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  // [Feedback 12] 성공 팝업
   void _showSuccessDialog(String message) {
     showDialog(
       context: context,
@@ -101,21 +98,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         await ref.read(authProvider.notifier).signUp(email, password);
         if (mounted) {
           _showSuccessDialog('가입 성공! 로그인해주세요.');
-          setState(() => _isLogin = true); // 가입 성공 시 로그인 화면으로 전환
+          setState(() => _isLogin = true);
         }
       }
     } catch (e) {
       if (!mounted) return;
-      String errorMessage = e.toString();
-      if (errorMessage.contains("Invalid login credentials")) {
-        errorMessage = "이메일 또는 비밀번호가 올바르지 않습니다.";
-      } else if (errorMessage.contains("Email not confirmed")) {
+
+      String errorMessage = "로그인 실패: 이메일 또는 비밀번호를 확인해주세요.";
+      final errorStr = e.toString();
+
+      if (errorStr.contains("Email not confirmed")) {
         errorMessage = "이메일 인증이 완료되지 않았습니다.";
-      } else if (errorMessage.contains("User already registered")) {
+      } else if (errorStr.contains("User already registered") || errorStr.contains("already exists")) {
         errorMessage = "이미 가입된 이메일입니다.";
-      } else {
-        errorMessage = errorMessage.replaceAll("Exception: ", "");
       }
+
       _showErrorDialog(errorMessage);
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -123,8 +120,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   void _showForgotPasswordDialog() {
-    // (기존 코드 유지 - 너무 길어서 생략하지만, 필요하다면 그대로 두시면 됩니다)
-    // ... 기존과 동일 ...
     final emailCtrl = TextEditingController();
     final nameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
@@ -199,7 +194,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               final teamId = result['team_id'] as int? ?? 1;
                               teamColorResult = Department.values.firstWhere((d) => d.id == teamId, orElse: () => Department.business).color;
                             } else {
-                              // 여기는 Dialog 내부라 SnackBar 사용해도 무방하지만 일관성을 위해 텍스트 표시 등으로 바꿀 수 있음
                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("일치하는 회원 정보가 없습니다.")));
                             }
                           });
@@ -240,12 +234,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // [Feedback 9] 안드로이드 물리 뒤로가기 버튼 처리
     return PopScope(
-      canPop: _isLogin, // 로그인 모드일 때만 앱 종료 가능
+      canPop: _isLogin,
       onPopInvoked: (didPop) {
         if (!didPop && !_isLogin) {
-          // 회원가입 모드에서 뒤로가기 누르면 로그인 모드로 전환
           setState(() => _isLogin = true);
         }
       },
@@ -269,7 +261,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     const SizedBox(height: 50),
 
                     GlassContainer.clearGlass(
-                      height: 560, // 높이 약간 증가
+                      height: 560,
                       width: double.infinity,
                       borderRadius: BorderRadius.circular(24),
                       borderWidth: 1.5,
@@ -282,7 +274,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              // [Feedback 9] 상단 뒤로가기 아이콘 (회원가입 시 표시)
                               if (!_isLogin)
                                 Padding(
                                   padding: const EdgeInsets.only(right: 8.0),
@@ -330,14 +321,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                           const SizedBox(height: 20),
 
-                          // [Feedback 9] 하단 전환 버튼
                           if (_isLogin)
                             TextButton(
                               onPressed: () => setState(() => _isLogin = !_isLogin),
                               child: const Text("New here? Sign Up", style: TextStyle(color: Colors.white70)),
                             )
                           else
-                          // 회원가입 모드일 때 "로그인으로 돌아가기" 버튼 명시
                             TextButton(
                               onPressed: () => setState(() => _isLogin = true),
                               child: const Text("Already a member? Log in", style: TextStyle(color: Colors.white70)),

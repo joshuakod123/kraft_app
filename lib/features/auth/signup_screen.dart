@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/data/supabase_repository.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -22,7 +21,6 @@ class _SignupScreenState extends State<SignupScreen> {
   int _selectedCohort = 1;
   bool _isLoading = false;
 
-  // [Feedback 12] 팝업 알림 함수
   void _showPopup(String title, String message, {bool isSuccess = false}) {
     showDialog(
       context: context,
@@ -36,7 +34,6 @@ class _SignupScreenState extends State<SignupScreen> {
             onPressed: () {
               Navigator.pop(context);
               if (isSuccess) {
-                // 로그인 화면으로 이동 (스택에 있으면 pop, 아니면 go)
                 if (context.canPop()) {
                   context.pop();
                 } else {
@@ -63,7 +60,6 @@ class _SignupScreenState extends State<SignupScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // [에러 해결] Named Parameter 사용 (email: , password: )
       final error = await SupabaseRepository().signUp(
         email: email,
         password: password,
@@ -76,12 +72,10 @@ class _SignupScreenState extends State<SignupScreen> {
       if (!mounted) return;
       _showPopup("회원가입 성공", "회원가입이 완료되었습니다.\n이메일 인증 후 로그인해주세요.", isSuccess: true);
 
-    } on AuthException catch (e) {
-      if (!mounted) return;
-      _showPopup("오류", e.message);
     } catch (e) {
       if (!mounted) return;
-      _showPopup("오류", "알 수 없는 오류가 발생했습니다: $e");
+      // 복잡한 에러 대신 깔끔한 한국어 메시지로 변경
+      _showPopup("회원가입 실패", "회원가입에 실패했습니다. 이미 가입된 이메일인지 혹은 비밀번호가 6자 이상인지 확인해주세요.");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -94,7 +88,6 @@ class _SignupScreenState extends State<SignupScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        // [Feedback 9] 뒤로가기 버튼
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
           onPressed: () => context.canPop() ? context.pop() : context.go('/login'),

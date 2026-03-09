@@ -61,8 +61,6 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
 
       Map<DateTime, List<Map<String, dynamic>>> newEvents = {};
 
-      // [데이터 병합 로직]
-
       // A. 개인 일정 처리
       for (var item in schedulesResponse) {
         final DateTime startDate = DateTime.parse(item['start_time']).toLocal();
@@ -110,7 +108,6 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
     return _events[DateTime.utc(day.year, day.month, day.day)] ?? [];
   }
 
-  // 개인 일정 추가
   Future<void> _addPersonalSchedule({
     required String title,
     required String description,
@@ -128,7 +125,6 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
     }
   }
 
-  // [수정] 공식 커리큘럼 추가 (시간 포함)
   Future<void> _addOfficialCurriculum({
     required String title,
     required String description,
@@ -143,8 +139,8 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
         title: title,
         description: description,
         weekNumber: weekNumber,
-        startTime: startTime, // 시작 시간
-        endTime: endTime,     // 종료 시간
+        startTime: startTime,
+        endTime: endTime,
         teamId: myDept.id,
       );
 
@@ -165,7 +161,7 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
       if (isOfficial) {
         await _supabase.from('curriculums').delete().eq('id', id);
       } else {
-        await _supabase.from('schedules').delete().eq('id', id); // schedules or personal_schedules
+        await _supabase.from('schedules').delete().eq('id', id);
       }
 
       await _fetchAllEvents();
@@ -476,7 +472,7 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
   }
 
   // --------------------------------------------------------
-  // 3. 팝업 & 다이얼로그
+  // 3. 팝업 & 다이얼로그 & 바텀시트
   // --------------------------------------------------------
 
   void _handleFabClick(BuildContext context, Color themeColor, bool isManager) {
@@ -532,7 +528,7 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
     }
   }
 
-  // [개인 일정 추가 시트] - 기존과 동일, 생략 없이 포함
+  // [수정됨] 개인 일정 추가 시트 (날짜/시간 선택 UI 추가)
   void _showAddPersonalScheduleSheet(BuildContext context, Color themeColor) {
     DateTime now = DateTime.now();
     DateTime inputDate = _selectedDay ?? now;
@@ -578,16 +574,29 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                           const SizedBox(height: 16),
                           _buildTextField(descController, "설명 (선택사항)", Icons.description_outlined, themeColor, maxLines: 2),
                           const SizedBox(height: 20),
+
+                          // 날짜 선택 추가
+                          _buildDatePickerButton(context, "날짜 선택", inputDate, themeColor, () async {
+                            final date = await showDatePicker(
+                              context: context,
+                              initialDate: inputDate,
+                              firstDate: DateTime(2023),
+                              lastDate: DateTime(2030),
+                            );
+                            if (date != null) setSheetState(() => inputDate = date);
+                          }),
+                          const SizedBox(height: 16),
+
                           Row(
                             children: [
-                              Expanded(child: _buildTimePickerButton(context, "시작", startTime, themeColor, () async {
+                              Expanded(child: _buildTimePickerButton(context, "시작 시간", startTime, themeColor, () async {
                                 final time = await showTimePicker(context: context, initialTime: startTime);
                                 if (time != null) setSheetState(() => startTime = time);
                               })),
                               const SizedBox(width: 12),
                               Icon(Icons.arrow_forward_rounded, color: Colors.white.withOpacity(0.2)),
                               const SizedBox(width: 12),
-                              Expanded(child: _buildTimePickerButton(context, "종료", endTime, themeColor, () async {
+                              Expanded(child: _buildTimePickerButton(context, "종료 시간", endTime, themeColor, () async {
                                 final time = await showTimePicker(context: context, initialTime: endTime);
                                 if (time != null) setSheetState(() => endTime = time);
                               })),
@@ -601,8 +610,8 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                               onPressed: () {
                                 FocusScope.of(context).unfocus();
                                 if (titleController.text.isNotEmpty) {
-                                  final startDateTime = DateTime(inputDate.year, inputDate.month, inputDate.day, startTime.hour, startTime.minute);
-                                  final endDateTime = DateTime(inputDate.year, inputDate.month, inputDate.day, endTime.hour, endTime.minute);
+                                  final startDateTime = DateTime(inputDate.year, inputDate.month, inputDate.day, startTime.hour, startTime.minute).toUtc();
+                                  final endDateTime = DateTime(inputDate.year, inputDate.month, inputDate.day, endTime.hour, endTime.minute).toUtc();
                                   _addPersonalSchedule(title: titleController.text, description: descController.text, startTime: startDateTime, endTime: endDateTime);
                                   Navigator.pop(context);
                                 }
@@ -625,14 +634,13 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
     );
   }
 
-  // [수정] 공식 커리큘럼 추가 시트 (시간 선택 추가)
+  // [수정됨] 공식 커리큘럼 추가 시트 (날짜/시간 선택 UI 완벽 적용)
   void _showAddOfficialCurriculumSheet(BuildContext context) {
-    final DateTime inputDate = _selectedDay ?? DateTime.now();
+    DateTime inputDate = _selectedDay ?? DateTime.now();
     final titleController = TextEditingController();
     final weekController = TextEditingController();
     final descController = TextEditingController();
 
-    // 기본 시간 설정 (오후 6시 ~ 8시)
     TimeOfDay startTime = const TimeOfDay(hour: 18, minute: 0);
     TimeOfDay endTime = const TimeOfDay(hour: 20, minute: 0);
 
@@ -680,7 +688,19 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                           _buildTextField(descController, "설명 / 공지사항", Icons.description_outlined, officialColor, maxLines: 3),
 
                           const SizedBox(height: 20),
-                          // [추가] 시간 선택 UI
+
+                          // 날짜 선택기 추가
+                          _buildDatePickerButton(context, "날짜 선택", inputDate, officialColor, () async {
+                            final date = await showDatePicker(
+                              context: context,
+                              initialDate: inputDate,
+                              firstDate: DateTime(2023),
+                              lastDate: DateTime(2030),
+                            );
+                            if (date != null) setSheetState(() => inputDate = date);
+                          }),
+                          const SizedBox(height: 16),
+
                           Row(
                             children: [
                               Expanded(child: _buildTimePickerButton(context, "시작 시간", startTime, officialColor, () async {
@@ -696,17 +716,6 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                               })),
                             ],
                           ),
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              const Icon(Icons.event_available, color: Colors.white70, size: 20),
-                              const SizedBox(width: 10),
-                              Text(
-                                "날짜: ${DateFormat('yyyy년 M월 d일 (E)', 'ko_KR').format(inputDate)}",
-                                style: const TextStyle(color: Colors.white, fontSize: 16),
-                              ),
-                            ],
-                          ),
 
                           const SizedBox(height: 30),
                           SizedBox(
@@ -718,16 +727,14 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                                 if (titleController.text.isNotEmpty && weekController.text.isNotEmpty) {
                                   final int week = int.tryParse(weekController.text) ?? 0;
 
-                                  // 시간 데이터 병합
-                                  final startDateTime = DateTime(inputDate.year, inputDate.month, inputDate.day, startTime.hour, startTime.minute);
-                                  final endDateTime = DateTime(inputDate.year, inputDate.month, inputDate.day, endTime.hour, endTime.minute);
-
+                                  final startDateTime = DateTime(inputDate.year, inputDate.month, inputDate.day, startTime.hour, startTime.minute).toUtc();
+                                  final endDateTime = DateTime(inputDate.year, inputDate.month, inputDate.day, endTime.hour, endTime.minute).toUtc();
                                   _addOfficialCurriculum(
                                     title: titleController.text,
                                     description: descController.text,
                                     weekNumber: week,
-                                    startTime: startDateTime, // 전달
-                                    endTime: endDateTime,     // 전달
+                                    startTime: startDateTime,
+                                    endTime: endDateTime,
                                   );
                                   Navigator.pop(context);
                                 }
@@ -766,26 +773,15 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                 size: 48,
               ),
               const SizedBox(height: 16),
-              Text(
-                title,
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-              ),
+              Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14),
-              ),
+              Text(message, textAlign: TextAlign.center, style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14)),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: themeColor.withOpacity(0.8),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
+                  style: ElevatedButton.styleFrom(backgroundColor: themeColor.withOpacity(0.8), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                   child: const Text("확인"),
                 ),
               ),
@@ -812,21 +808,14 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
               const Text("일정 삭제", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               Text(
-                isOfficial
-                    ? "공식 세션입니다. 정말 삭제하시겠습니까?\n모든 부원의 캘린더에서 사라집니다."
-                    : "정말 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.",
+                isOfficial ? "공식 세션입니다. 정말 삭제하시겠습니까?\n모든 부원의 캘린더에서 사라집니다." : "정말 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.",
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 14),
               ),
               const SizedBox(height: 24),
               Row(
                 children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: Text("취소", style: TextStyle(color: Colors.white.withOpacity(0.5))),
-                    ),
-                  ),
+                  Expanded(child: TextButton(onPressed: () => Navigator.pop(context), child: Text("취소", style: TextStyle(color: Colors.white.withOpacity(0.5))))),
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () {
@@ -868,31 +857,19 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                       decoration: BoxDecoration(
                         color: isOfficial ? const Color(0xFFFFD700).withOpacity(0.2) : themeColor.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: isOfficial ? const Color(0xFFFFD700) : themeColor,
-                        ),
+                        border: Border.all(color: isOfficial ? const Color(0xFFFFD700) : themeColor),
                       ),
                       child: Text(
                         isOfficial ? "OFFICIAL" : "PERSONAL",
-                        style: TextStyle(
-                          color: isOfficial ? const Color(0xFFFFD700) : themeColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(color: isOfficial ? const Color(0xFFFFD700) : themeColor, fontWeight: FontWeight.bold, fontSize: 12),
                       ),
                     ),
                     const Spacer(),
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Icon(Icons.close, color: Colors.white.withOpacity(0.5)),
-                    )
+                    GestureDetector(onTap: () => Navigator.pop(context), child: Icon(Icons.close, color: Colors.white.withOpacity(0.5)))
                   ],
                 ),
                 const SizedBox(height: 20),
-                Text(
-                  event['title'] ?? '제목 없음',
-                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold, height: 1.2),
-                ),
+                Text(event['title'] ?? '제목 없음', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold, height: 1.2)),
                 const SizedBox(height: 12),
                 Row(
                   children: [
@@ -908,14 +885,9 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
                   child: Text(
-                    event['description'] != null && event['description'].toString().isNotEmpty
-                        ? event['description']
-                        : "설명이 없습니다.",
+                    event['description'] != null && event['description'].toString().isNotEmpty ? event['description'] : "설명이 없습니다.",
                     style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 15, height: 1.5),
                   ),
                 ),
@@ -959,6 +931,30 @@ class _CurriculumListScreenState extends ConsumerState<CurriculumListScreen> {
         fillColor: Colors.white.withOpacity(0.05),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
         focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: color)),
+      ),
+    );
+  }
+
+  // 새로 추가된 "날짜" 선택 버튼용 위젯
+  Widget _buildDatePickerButton(BuildContext context, String label, DateTime date, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12)),
+          const SizedBox(height: 6),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white.withOpacity(0.1))),
+            child: Row(children: [
+              Icon(Icons.calendar_month, color: color, size: 18),
+              const SizedBox(width: 8),
+              Text(DateFormat('yyyy년 MM월 dd일').format(date), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
+            ]),
+          ),
+        ],
       ),
     );
   }

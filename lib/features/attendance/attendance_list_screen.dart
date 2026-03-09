@@ -11,11 +11,9 @@ class AttendanceListScreen extends StatefulWidget {
 }
 
 class _AttendanceListScreenState extends State<AttendanceListScreen> {
-  // 필터 상태 (ID 기준)
   int? _selectedCurriculumId;
   int? _selectedTeamId;
 
-  // 이름 매핑을 위한 메모리 캐시
   final Map<int, String> _teamMap = {};
   final Map<int, String> _curriculumMap = {};
   bool _mapsLoaded = false;
@@ -26,7 +24,6 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
     _loadMaps();
   }
 
-  // 화면 진입 시 부서/세션 이름을 미리 한 번만 불러옵니다.
   Future<void> _loadMaps() async {
     final client = Supabase.instance.client;
     final teamsData = await client.from('teams').select('id, name');
@@ -81,19 +78,20 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
           }
 
           final rawData = snapshot.data ?? [];
-          final allLogs = rawData.map((json) => AttendanceLog.fromJson(json)).toList();
 
-          // 필터 옵션 추출 (기록이 있는 ID만 모음)
-          final Set<int> presentSessionIds = allLogs.map((e) => e.curriculumId).toSet();
-          final Set<int> presentTeamIds = allLogs.map((e) => e.teamId).toSet();
+          // 옵션 추출
+          final Set<int> presentSessionIds = rawData.map((e) => e['curriculum_id'] as int).toSet();
+          final Set<int> presentTeamIds = rawData.map((e) => e['team_id'] as int).toSet();
 
           final sessionOptions = presentSessionIds.toList();
           final teamOptions = presentTeamIds.toList();
 
           // 실제 필터링 진행
-          final filteredLogs = allLogs.where((log) {
-            final matchSession = _selectedCurriculumId == null || log.curriculumId == _selectedCurriculumId;
-            final matchTeam = _selectedTeamId == null || log.teamId == _selectedTeamId;
+          final filteredRawLogs = rawData.where((json) {
+            final curriculumId = json['curriculum_id'] as int;
+            final teamId = json['team_id'] as int;
+            final matchSession = _selectedCurriculumId == null || curriculumId == _selectedCurriculumId;
+            final matchTeam = _selectedTeamId == null || teamId == _selectedTeamId;
             return matchSession && matchTeam;
           }).toList();
 
@@ -172,7 +170,7 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      "총 ${filteredLogs.length}명 출석",
+                      "총 ${filteredRawLogs.length}명 출석",
                       style: const TextStyle(color: Colors.white70, fontSize: 14),
                     ),
                     if (_selectedCurriculumId != null)
@@ -186,7 +184,7 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
 
               // [리스트 영역]
               Expanded(
-                child: filteredLogs.isEmpty
+                child: filteredRawLogs.isEmpty
                     ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -199,14 +197,19 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
                 )
                     : ListView.builder(
                   padding: const EdgeInsets.only(bottom: 40),
-                  itemCount: filteredLogs.length,
+                  itemCount: filteredRawLogs.length,
                   itemBuilder: (context, index) {
-                    final log = filteredLogs[index];
+                    final json = filteredRawLogs[index];
+                    final log = AttendanceLog.fromJson(json);
+
+                    // DB에서 추가한 fine 값을 가져옵니다. 없으면 0원 처리.
+                    final int fineAmount = json['fine'] as int? ?? 0;
+
                     final timeStr = DateFormat('HH:mm').format(log.createdAt.toLocal());
                     final sessionName = _curriculumMap[log.curriculumId] ?? '알 수 없는 세션';
                     final teamName = _teamMap[log.teamId] ?? '알 수 없는 팀';
 
-                    return _buildAttendanceCard(log.userId, sessionName, teamName, timeStr);
+                    return _buildAttendanceCard(log.userId, sessionName, teamName, timeStr, fineAmount);
                   },
                 ),
               ),
@@ -236,7 +239,9 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
     );
   }
 
-  Widget _buildAttendanceCard(String userId, String sessionName, String teamName, String timeStr) {
+  Widget _buildAttendanceCard(String userId, String sessionName, String teamName, String timeStr, int fineAmount) {
+    final bool isLate = fineAmount > 0;
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
@@ -245,7 +250,7 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
         border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: CircleAvatar(
           backgroundColor: Colors.white10,
           child: _UserNameLabel(userId: userId, onlyInitial: true),
@@ -268,13 +273,33 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
           ],
         ),
         subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4.0),
+          padding: const EdgeInsets.only(top: 6.0),
           child: Text(
             '$sessionName • $timeStr 출석',
             style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
           ),
         ),
-        trailing: const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 20),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (isLate) ...[
+              const Text(
+                '지각',
+                style: TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${NumberFormat('#,###').format(fineAmount)}원',
+                style: const TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+            ] else ...[
+              const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 24),
+              const SizedBox(height: 2),
+              const Text('정상', style: TextStyle(color: Colors.greenAccent, fontSize: 10)),
+            ]
+          ],
+        ),
       ),
     );
   }
