@@ -68,7 +68,6 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> with Widget
     try {
       final Map<String, dynamic> data = jsonDecode(rawData);
 
-      // QR에서 숫자 ID 추출
       final int? curriculumId = data['c'] as int?;
       final int? teamId = data['t'] as int?;
 
@@ -76,7 +75,7 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> with Widget
         throw const FormatException();
       }
 
-      // 출석 처리 후 서버에서 계산된 벌금 받아오기
+      // 서버 다녀오고 벌금 액수 받기
       final int fineAmount = await SupabaseRepository().markAttendance(
         curriculumId: curriculumId,
         qrTeamId: teamId,
@@ -85,6 +84,9 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> with Widget
       if (!mounted) return;
 
       final bool isLate = fineAmount > 0;
+
+      // 기기의 정확한 한국 시간(현재 시간)을 가져옵니다.
+      final String scanTimeStr = DateFormat('MM월 dd일 HH:mm').format(DateTime.now());
 
       await showDialog(
         context: context,
@@ -110,23 +112,39 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> with Widget
                   )
               ),
               const SizedBox(height: 12),
+
+              // 한국 출석 시간 명시
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                    '인증 시간: $scanTimeStr',
+                    style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // 지각일 경우 벌금 표시
               if (isLate) ...[
                 Text(
                     '벌금 ${NumberFormat('#,###').format(fineAmount)}원이 부과되었습니다.',
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)
+                    style: const TextStyle(color: Colors.redAccent, fontSize: 16, fontWeight: FontWeight.bold)
                 ),
                 const SizedBox(height: 8),
                 const Text('세션 시작 시간을 초과했습니다.', style: TextStyle(color: Colors.white54, fontSize: 13)),
               ] else ...[
-                const Text('세션 출석이 확인되었습니다.', style: TextStyle(color: Colors.white70)),
+                const Text('세션 출석이 정상 확인되었습니다.', style: TextStyle(color: Colors.white70)),
               ]
             ],
           ),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(context); // 다이얼로그 닫기
-                context.pop(); // 스캔 화면 닫기
+                Navigator.pop(context);
+                context.pop();
               },
               child: const Text('확인', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
@@ -219,21 +237,12 @@ class _AttendanceScanScreenState extends State<AttendanceScanScreen> with Widget
                     children: [
                       const Icon(Icons.videocam_off_outlined, color: Colors.white54, size: 60),
                       const SizedBox(height: 24),
-                      const Text(
-                        '카메라 권한이 없습니다.',
-                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
+                      const Text('카메라 권한이 없습니다.', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
-                      const Text(
-                        '출석 체크를 위해 설정에서\n카메라 권한을 허용해주세요.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white54, fontSize: 14),
-                      ),
+                      const Text('출석 체크를 위해 설정에서\n카메라 권한을 허용해주세요.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white54, fontSize: 14)),
                       const SizedBox(height: 32),
                       ElevatedButton.icon(
-                        onPressed: () async {
-                          await openAppSettings();
-                        },
+                        onPressed: () async { await openAppSettings(); },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
                           foregroundColor: Colors.black,

@@ -148,8 +148,11 @@ class SupabaseRepository {
     try {
       await _client.from('curriculums').insert({
         'title': title, 'description': description, 'week_number': weekNumber,
-        'team_id': teamId ?? 1, 'event_date': startTime.toIso8601String(),
-        'end_time': endTime.toIso8601String(), 'semester_id': 1,
+        'team_id': teamId ?? 1,
+        // [중요] KST 기준 시간이 UTC로 잘못 들어가지 않도록 강제 변환
+        'event_date': startTime.toUtc().toIso8601String(),
+        'end_time': endTime.toUtc().toIso8601String(),
+        'semester_id': 1,
       });
       return true;
     } catch (e) {
@@ -157,7 +160,7 @@ class SupabaseRepository {
     }
   }
 
-  // [수정됨] 세션의 title뿐만 아니라 id도 가져옵니다.
+  // 세션의 title뿐만 아니라 id도 가져옵니다.
   Future<List<Map<String, dynamic>>> getSessionOptions(int teamId) async {
     try {
       final response = await _client
@@ -203,8 +206,10 @@ class SupabaseRepository {
       if (userId == null) return false;
       await _client.from('personal_schedules').insert({
         'user_id': userId, 'title': title, 'description': desc,
-        'start_time': date.toIso8601String(), 'end_time': endTime?.toIso8601String(),
-        'event_date': date.toIso8601String(),
+        // [중요] 개인 일정도 날짜 밀림 방지를 위해 무조건 UTC로 변환하여 저장
+        'start_time': date.toUtc().toIso8601String(),
+        'end_time': endTime?.toUtc().toIso8601String(),
+        'event_date': date.toUtc().toIso8601String(),
       });
       return true;
     } catch (e) {
@@ -424,8 +429,8 @@ class SupabaseRepository {
 
   Future<bool> uploadAssignment(int curriculumId) async { return false; }
 
-  // [수정됨] 출석 체계 완벽 검증 및 DB 적용
   // [수정됨] 출석 체계 완벽 검증 및 DB 적용 (벌금 반환 추가)
+  // [수정됨] 출석 체계 완벽 검증 및 DB 적용 (타임존 더블 시프트 버그 원천 차단)
   Future<int> markAttendance({
     required int curriculumId,
     required int qrTeamId,
@@ -436,16 +441,13 @@ class SupabaseRepository {
     }
 
     try {
-      // 1. 현재 사용자의 부서(team_id) 가져오기
       final userData = await _client.from('users').select('team_id').eq('id', user.id).single();
       final userTeamId = userData['team_id'] as int;
 
-      // 2. 다른 부서 QR 스캔 원천 차단
       if (userTeamId != qrTeamId) {
         throw Exception('소속 부서가 일치하지 않습니다.\n타 부서 세션에 출석할 수 없습니다.');
       }
 
-      // 3. 중복 스캔 방지
       final existing = await _client
           .from('attendance')
           .select('id')
@@ -457,14 +459,17 @@ class SupabaseRepository {
         throw Exception('이미 출석 처리된 세션입니다.');
       }
 
-      // 4. 출석 데이터 삽입 후 트리거가 계산한 'fine(벌금)' 값을 반환받음
+      // [핵심 해결책] DB 스키마의 망가진 'kst' DEFAULT 설정에 맡기지 않고,
+      // 앱에서 디바이스의 정확한 현재 시간을 UTC로 변환하여 강제 주입합니다.
+      final nowUtc = DateTime.now().toUtc().toIso8601String();
+
       final response = await _client.from('attendance').insert({
         'user_id': user.id,
         'curriculum_id': curriculumId,
         'team_id': userTeamId,
+        'created_at': nowUtc, // <-- 강제로 올바른 시간을 꽂아넣음
       }).select('fine').single();
 
-      // 서버에서 계산된 벌금을 리턴 (null이면 0)
       return response['fine'] as int? ?? 0;
 
     } catch (e) {
